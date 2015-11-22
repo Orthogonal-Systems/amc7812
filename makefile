@@ -1,76 +1,81 @@
 #==================================================================
 #==================================================================
-#==================================================================
-# main program name
-MAIN=main
-
-#==================================================================
-# compiler and linker options
-
-SOURCES=$(MAIN).c amc7812.c serial.c
-EXECUTABLE=$(MAIN)
-
-# you shouldn't need to touch these
-CC=avr-gcc
-CFLAGS=-Os -DF_CPU=16000000UL -mmcu=atmega328p -std=c99 -c
-LDFLAGS=-mmcu=atmega328p
-OBJECTS=$(SOURCES:.c=.o)
-
-#==================================================================
-# hex converter options
-
-# you shouldn't need to touch these
-HEXCNVRT=avr-objcopy
-HEXFLAGS=-O
-HEX=$(EXECUTABLE).hex
-
-#==================================================================
-# uploader options
-
-PARTNO=ATMEGA328P
-
-#ifeq($(wildcard /dev/ttyACM0),) 
-PORT=/dev/ttyACM*
-#else
-#PORT=/dev/ttyACM1
-#endif
-
-# you shouldn't need to touch these
-UPLOADER=avrdude
-BAUD=115200
-CPROG=arduino
-UPLOADFLAGS=-c $(CPROG) -b $(BAUD) 
-
+# This make file is for the particular project, and calls the 
+# $(PROJECT_DIR)/tools/master.mk, which is based on sudar's
+# Arduino-Makefile project
+#
+# Written by: Matthew Ebert
 #==================================================================
 #==================================================================
 
-all: $(SOURCES) $(EXECUTABLE) $(HEX)
+### PROJECT_DIR
+### This is the path to where you have created/cloned your project
+PROJECT_DIR       = ..
 
-#==================================================================
+### ARDMK_DIR
+### Path to the Arduino-Makefile directory.
+ARDMK_DIR         = $(PROJECT_DIR)/tools
 
-$(EXECUTABLE): $(OBJECTS) 
-	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
+### ARDUINO_DIR
+### Path to the Arduino application and resources directory.
+### uncomment the one you want
+### Use the encapsulated libraries
+ARDUINO_DIR       =  $(PROJECT_DIR)/tools
+### On OS X:
+#ARDUINO_DIR       = /Applications/Arduino.app/Contents/Java
+### or on Linux: 
+#ARDUINO_DIR       = /usr/share/arduino
 
-#==================================================================
+### USER_LIB_PATH
+### Path to where the your project's libraries are stored.
+USER_LIB_PATH    :=  $(PROJECT_DIR)
 
-%.o: %.c
-	$(CC) $(CFLAGS) $< -o $@
+### BOARD_TAG
+### It must be set to the board you are currently using. (i.e uno, mega2560, etc.)
+BOARD_TAG         = uno
 
-#==================================================================
+### MONITOR_BAUDRATE
+### It must be set to Serial baudrate value you are using.
+MONITOR_BAUDRATE  = 115200
 
-$(HEX): $(EXECUTABLE)
-	$(HEXCNVRT) $(HEXFLAGS) ihex -R .eeprom $(EXECUTABLE) $@
+### AVR_TOOLS_DIR
+### Path to the AVR tools directory such as avr-gcc, avr-g++, etc.
+### On OS X with `homebrew`:
+#AVR_TOOLS_DIR     = /usr/local
+### or on Linux: (remove the one you don't want)
+AVR_TOOLS_DIR     = /usr
 
-#==================================================================
+### AVRDUDE
+### Path to avrdude directory.
+### On OS X with `homebrew`:
+#AVRDUDE          = /usr/local/bin/avrdude
+### or on Linux: (remove the one you don't want)
+AVRDUDE          = /usr/bin/avrdude
 
-UPLOAD: $(HEX)
-	$(UPLOADER) -p $(PARTNO) -P $(PORT) $(UPLOADFLAGS) -U flash:w:$(HEX)
+### CFLAGS_STD
+### Set the C standard to be used during compilation. Documentation (https://github.com/WeAreLeka/Arduino-Makefile/blob/std-flags/arduino-mk-vars.md#cflags_std)
+CFLAGS_STD        = -std=gnu11
 
-#==================================================================
+### CXXFLAGS_STD
+### Set the C++ standard to be used during compilation. Documentation (https://github.com/WeAreLeka/Arduino-Makefile/blob/std-flags/arduino-mk-vars.md#cxxflags_std)
+CXXFLAGS_STD      = -std=gnu++11
 
-clean:
-	rm *.o $(EXECUTABLE) $(HEX)
+### CXXFLAGS
+### Flags you might want to set for debugging purpose. Comment to stop.
+CXXFLAGS         += -pedantic -Wall -Wextra
 
-#==================================================================
-#==================================================================
-#==================================================================
+### MONITOR_PORT
+### The port your board is connected to. Using an '*' tries all the ports and finds the right one.
+#MONITOR_PORT      = /dev/tty.usbmodem*
+MONITOR_PORT      = /dev/ttyACM*
+
+### CURRENT_DIR
+### Do not touch - used for binaries path
+CURRENT_DIR       = $(shell basename $(CURDIR))
+
+### OBJDIR
+### This is where you put the binaries you just compile using 'make'
+OBJDIR            = $(PROJECT_DIR)/bin/$(BOARD_TAG)/$(CURRENT_DIR)
+
+### Do not touch - the path to master.mk, inside the ARDMK_DIR
+include $(ARDMK_DIR)/master.mk
