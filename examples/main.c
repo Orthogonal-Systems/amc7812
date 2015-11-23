@@ -6,7 +6,7 @@
 #include "amc7812.h"
 #include "amc7812conf.h"
 
-#include "serial.h"
+#include "usart.h"
 
 #define READ_ADC_REG 0
 #define READ_BLOCK_SIZE 512
