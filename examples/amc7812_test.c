@@ -120,7 +120,7 @@ int main (void)
   }
 
   uint16_t adc_vals[AMC7812_ADC_CNT];
-  for(uint8_t i; i < 4; i++){
+  for(uint8_t i=0; i < 4; i++){
     amc7812_ReadADC( 0 );
     // just do a dummy read of the next register to round it out
     for( uint8_t i = 1; i <= AMC7812_ADC_CNT; i++ ){

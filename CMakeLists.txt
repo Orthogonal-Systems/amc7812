@@ -11,4 +11,4 @@ file(GLOB AMC7812_SRCS ${PROJECT_SOURCE_DIR}/*.cpp ${PROJECT_SOURCE_DIR}/*.c)
 include_directories("${PROJECT_BINARY_DIR}")
 include_directories("${PROJECT_INCLUDE_DIR}")
  
-add_library(${PROJECT_NAME} STATIC ${AMC7812_SRCS})
+add_avr_library(${PROJECT_NAME} STATIC ${AMC7812_SRCS})

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project (AMC7812_EXAMPLES)
+project (amc7812_examples)
 
 include(${CMAKE_SOURCE_DIR}/arduino-uno-crosscompile.cmake)
  
@@ -9,6 +9,7 @@ include_directories("${PROJECT_BINARY_DIR}")
 include_directories("${PROJECT_INCLUDE_DIR}")
 
 ### add example executable directories
-add_executable(amc7812_test amc7812_test.c)
+add_avr_executable(amc7812_test amc7812_test.c)
 ### add the dependant libraries
-#target_link_libraries(amc7812_test amc7812)
+avr_target_link_libraries(amc7812_test AMC7812)
+avr_target_link_libraries(amc7812_test USART)
