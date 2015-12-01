@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 project (amc7812_examples)
 
-include(${CMAKE_SOURCE_DIR}/arduino-uno-crosscompile.cmake)
+include(${ARDUINO_SETTINGS_FILE})
  
 set(PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include)
  
