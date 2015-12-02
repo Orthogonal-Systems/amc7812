@@ -162,32 +162,373 @@
 
 // functions
 #include <stdint.h>
+#include <Arduino.h>
+#include <SPI.h>
 
-uint8_t  amc7812_Init ();
-uint16_t amc7812_Read ( uint8_t addr );
-uint16_t amc7812_Write( uint8_t addr, uint16_t value );
-//=============================================================================
-// temperature functions
-uint16_t  amc7812_ReadTemp ( uint8_t sensor );
-//=============================================================================
-// adc functions
-uint16_t  amc7812_ReadADC ( uint8_t n );
-uint16_t  amc7812_EnableADC ( uint8_t n );
-uint16_t  amc7812_EnableADCs ();
-uint16_t  amc7812_DisableADCs ();
-//=============================================================================
-// dac functions
-uint16_t  amc7812_ReadDAC  ( uint8_t n );
-uint16_t  amc7812_WriteDAC ( uint8_t n, uint16_t value );
-// dac gain is a register with one bit per channel,
-// Gain(0) = 2*Vref
-// Gain(1) = 5*Vref
-uint16_t  amc7812_ReadDACGain();
-// update all channel simultaneously
-uint16_t  amc7812_WriteDACGain ( uint16_t value );
-//=============================================================================
-// configuration registers functions
-uint8_t  amc7812_WriteAMCConfig  ( uint8_t n, uint16_t config );
-uint16_t  amc7812_TriggerADCs ();
+// return type so that we could extend to different size responses?
+// http://i.imgur.com/l3v4P3s.jpg
+typedef AMC7812_RETURN_TYPE Data ;
+typedef AMC7812_SRETURN_TYPE SData; // signed data
+typedef AMC7812_ADDR_TYPE Addr;
+typedef AMC7812_ERROR_TYPE Error;
+
+//! SPI Driver for TI AMC7812 ADC and DAC 
+/*!
+ * inherits from Arduino's SPIClass
+ */
+class AMC7812Class : SPIClass {
+  private:
+    // amc configuration registers 0&1
+    Data amc_conf[2]; 
+    // adc status register, enabled adc list
+    Data adc_status;
+    // adc status register, enabled adc list
+    Data adc_gain;
+    // last adc readings, stored here
+    Data adc_vals[AMC7812_ADC_CNT];
+    // dac status register, enabled dac list
+    Data dac_status;
+    // dac gain register
+    // Gain(0) = 2*Vref
+    // Gain(1) = 5*Vref
+    Data dac_gain;
+    // spi transfer frame
+    Data transfer ( uint8_t cmd[] );
+
+  public:
+    //! prepare device for SPI communication
+    /*!
+     * Tasks to be performed:
+     * - Reset device
+     * - Setup uC SPI interface
+     * - Verify device ID
+     * - Configure DACs
+     * - Configure ADCs
+     * - Trigger ADC read cycle
+     */
+    Error begin();
+
+    //! Read register value at address
+    /*!
+     * \param addr is the register address to be read
+     * \return returned value is the response for the previous frame
+     *
+     * This is a low-level register command, it is suggested that the user use a
+     * register specific command if provided.
+     * Responses are pipelined, so need to send a dummy second command to clock
+     * out response to this command.
+     * Sequence define starting pg 56 datasheet.
+     */
+    inline Data Read ( Addr addr ){
+      uint8_t cmd[] = { ( AMC7812_READ_MASK | addr ), 0x00, 0x00 };
+      return transfer( cmd );
+    }
+
+    //! Read register value at address
+    /*!
+     * \param addr is the register address to be written
+     * \return returned value is the response for the previous frame
+     *
+     * This is a low-level register command, it is suggested that the user use a
+     * register specific command if provided.
+     * Responses are pipelined.
+     * Sequence define starting pg 56 datasheet.
+     */
+    // TODO: make independent of Data size?
+    inline Data Write( Addr addr, Data value  ){
+      uint8_t cmd[] = { (AMC7812_WRITE_MASK | addr), 
+        (uint8_t)(value>>8), 
+        (uint8_t)(value) 
+      };
+      return transfer( cmd );
+    }
+
+    //=============================================================================
+    // temperature functions
+    //=============================================================================
+ 
+    //! Read temperature from sensor, 12-bit value
+    /*!
+     * \param sensor number (MAX 2).
+     * \return returned value is the response for the previous frame
+     * Readings are fixed 12-bit precision temperature in Celcius from addressed
+     * sensor bottom 4 LSBs are padded zeros. 
+     * Conversion 0.125 C/LSB, 0x0000 = 0 C, pg. 61
+     * Temp (C) = (result >> 4)/8
+     *
+     * No checks are performed to verify sensor is within range to maximize 
+     * performance, nor are the GPIO pins checked to verify the status.
+     * It is assumed that the user will either perform check at a higher level or 
+     * will check at/before compilation.
+     *
+     * Possible sensors (and GPIO collisions) are:
+     * - Local (on chip)
+     * - D1 (GPIO 4&5)
+     * - D2 (GPIO 6&7)
+     */
+    inline Data ReadTemp( uint8_t sensor ){
+      uint8_t cmd[] = { AMC7812_READ_MASK | (AMC7812_TEMP_BASE_ADDR + sensor), 0x00, 0x00 };
+      return transfer( cmd );
+    }
+
+    //=============================================================================
+    // adc functions
+    //=============================================================================
+
+    //! Read last recorded ADCn value, 12-bit value
+    /*!
+     * \param n is an integer between 0 and 15 (no check is performed) to read ADCn
+     * \return returned value is the response for the previous frame
+     *
+     * Read the last recorded value for ADCn. If triggered mode is active you may
+     * need to reassert the trigger and wait for the data available flag/pin to
+     * signify new readings.
+     * In continuous mode the ADC registers will be refreshing cyclically at the 
+     * specfied rate
+     */
+    inline Data ReadADC( uint8_t n ){
+      uint8_t cmd[] = { AMC7812_READ_MASK | (AMC7812_ADC_BASE_ADDR + n), 0x00, 0x00 };
+      return transfer( cmd );
+    }
+
+    //! Batch read operation, faster operatoin is possible with assumptions
+    /*! 
+     * Function is provided to conveniently measure the enabled ADC channels.
+     * If continuous mode, write conversion flag to status register and read ADCs.
+     * If triggered mode, send conversion trigger and read activated ADCs.
+     * Values are stored in `adc_vals` member, retrieve with `GetADCReadings()`. 
+     */
+    Error ReadADCs();
+
+    //! Retrieve results of `ReadADCs()`
+    /*! 
+     * Holds the result of the last batch read operation.
+     * Disabled channels default to 0.
+     * The index matches the channel number i.e. ADCn value is stored at `ADC[n]`.
+     */
+    Data* GetADCReadings(){ return adc_vals; };
+
+    //! Enable ADCn
+    /*!
+     * \param n is an integer between 0 and 15 (a check is performed) to enable ADCn
+     * \return returned value is the response for the previous frame
+     *
+     * Enabled ADCs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * ADC enabled/disabled status is stored bitwise in `adc_status` a high bit
+     * signifies an enabled channel.
+     * Use `GetADCStatus()` to retrieve `adc_status` member value.
+     */
+    Data EnableADC ( uint8_t n );
+
+    //! Enable All ADCs
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * _Note_ this operation requires two frames to set all values.
+     * The returned value is from the command preceeding both.
+     *
+     * Enabled ADCs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * ADC enabled/disabled status is stored bitwise in `adc_status` a high bit
+     * signifies an enabled channel.
+     * Use `GetADCStatus()` to retrieve `adc_status` member value.
+     */
+    Data EnableADCs ();
+
+    //! Disable ADCn
+    /*!
+     * \param n is an integer between 0 and 15 (a check is performed) to disable ADCn
+     * \return returned value is the response for the previous frame
+     *
+     * Enabled ADCs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * ADC enabled/disabled status is stored bitwise in `adc_status` a high bit
+     * signifies an enabled channel.
+     * Use `GetADCStatus()` to retrieve `adc_status` member value.
+     */
+    Data DisableADC ( uint8_t n );
+
+    //! Disable All ADCs
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * _Note_ this operation requires two frames to set all values.
+     * The returned value is from the command preceeding both.
+     *
+     * Enabled ADCs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * ADC enabled/disabled status is stored bitwise in `adc_status` a high bit
+     * signifies an enabled channel.
+     * Use `GetADCStatus()` to retrieve `adc_status` member value.
+     */
+    Data DisableADCs ();
+
+    //! Get bitwise list of enabled ADC channels
+    /*!
+     * \return returned value is the bitwise enabled adc channel member `adc_status`
+     *
+     * Enabled ADCs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * ADC enabled/disabled status is stored bitwise in `adc_status` a high bit
+     * signifies an enabled channel.
+     */
+    Data GetADCStatus (){ return adc_status; };
+
+    //! Set update mode to continuous
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * In continuous mode, the chip continuously cycles through the enabled ADC
+     * channels always updating.
+     * In triggered mode, the chip performs a single ADC conversion cycle of the
+     * enabled ADCs, then waits for another trigger.
+     *
+     * _Note_: If conserversions are not taking place a trigger will need to be
+     * asserted to begin the cycle even if in continuous mode.
+     * See page 30 of datasheet.
+     */
+    inline Data SetContinuousMode(){
+      return WriteAMCConfig( 0, amc_conf[0] | (1<<AMC7812_CMODE) );
+    }
+
+    //! Set update mode to triggered
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * In continuous mode, the chip continuously cycles through the enabled ADC
+     * channels always updating.
+     * In triggered mode, the chip performs a single ADC conversion cycle of the
+     * enabled ADCs, then waits for another trigger.
+     *
+     * See page 30 of datasheet.
+     */
+    inline Data SetTriggeredMode(){
+      return WriteAMCConfig( 0, amc_conf[0] & ~(1<<AMC7812_CMODE) );
+    }
+
+    //=============================================================================
+    // dac functions
+    //=============================================================================
+
+
+    //! Read DAC output value, 12-bit value
+    /*!
+     * \param n is an integer between 0 and 15 (no check is performed) to write 
+     * to DACn
+     * \return returned value is the response for the previous frame
+     *
+     * Read the current setpoint for DACn.
+     * The actual output voltage is given by:
+     * DACn = Gain * Vref * (Vsetpoint / 2**12)
+     */
+    inline Data ReadDAC( uint8_t n ){
+      return Read( AMC7812_DAC_BASE_ADDR + n );
+    }
+
+    //! Set DAC output value, 12-bit value
+    /*!
+     * \param n is an integer between 0 and 15 (no check is performed) to write 
+     * to DACn
+     * \param value is the DAC setpoint
+     * \return returned value is the response for the previous frame
+     *
+     * Write a new setpoint for DACn.
+     * The actual output voltage is given by:
+     * DACn = Gain * Vref * (setpoint / 2**12)
+     */
+    inline Data WriteDAC( uint8_t n, Data value ){
+      return Write( AMC7812_DAC_BASE_ADDR + n, value );
+    }
+
+    //! Read DAC gain setting
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * The DAC gain is stored bitwise with maximum output:
+     * - Gain(0) = 2*Vref
+     * - Gain(1) = 5*Vref
+     *
+     * The actual output voltage is given by:
+     * DACn = Gain * Vref * (Vsetpoint / 2**12)
+     */
+    inline Data GetDACGain(){
+      return dac_gain;
+    }
+
+    //! Write gain settings for all DAC channels
+    /*!
+     * \param value is the bitwise DAC gain setting for all channels
+     * \return returned value is the response for the previous frame
+     *
+     * The DAC gain is stored bitwise with maximum output:
+     * - Gain(0) = 2*Vref
+     * - Gain(1) = 5*Vref
+     *
+     * The actual output voltage is given by:
+     * DACn = Gain * Vref * (Vsetpoint / 2**12)
+     *
+     * If only a single channel is changed:
+     * `WriteDACGains( GetDACGain() | (1<<n) )`
+     * `WriteDACGains( GetDACGain() & ~(1<<n) )`
+     */
+    Data WriteDACGains ( Data value );
+
+    //=============================================================================
+    // configuration registers functions
+    //=============================================================================
+
+    //! Write to one of the chip main configuration registers
+    /*!
+     *  \param n is the AMC configuraion regster to be address, 0 or 1 (checked)
+     *  \param config is the register configuration value (masked)
+     *  \return 0 if no error, AMC_PARAM_OOR_ERR if n is out of range
+     *  
+     *  Flags and internal trigger bits (ICONV & ILDAC) cannot be set through this
+     *  function.
+     *
+     *  See page 66.
+     */
+    Error  WriteAMCConfig  ( uint8_t n, Data config );
+
+    //! Trigger an ADC conversion cycle internally
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * Trigger the adc conversion, using the status register, this should be less
+     * accurate than an external trigger.
+     * If in auto mode (CMODE = 1) then subsequent conversions happen automatically,
+     * if not then a trigger needs to be 
+     * sent each time the values need to be refreshed.
+     */
+    inline Data TriggerADCsInternal(){
+      return Write( AMC7812_AMC_CONF_0, amc_conf[0]|(1<<AMC7812_ICONV) );
+    }
+    //! Trigger an ADC conversion cycle externally
+    /*!
+     * Trigger the adc conversion, using the physical !CNVT pin on the chip.
+     * This should be more accurate timing than internal triggering if trigger mode is
+     * being used.
+     *
+     * If in auto mode (CMODE = 1) then subsequent conversions happen automatically,
+     * if not then a trigger needs to be sent each time the values need to be refreshed.
+     *
+     * _NOTE_: External triggering is only defined if the external !CNVT pin is attached,
+     * _AND_ the AMC7812_CNVT_PIN macro is defiend in `amc7812conf.h`.
+     */
+#ifdef AMC7812_CNVT_PIN
+    inline void TriggerADCsExternal(){
+      AMC7812_CNVT_PORT &= ~(1<<AMC7812_CNVT_PIN0; // low
+      AMC7812_CNVT_PORT |= (1<<AMC7812_CNVT_PIN0;  // high
+    }
+#endif
+};
+
+//extern AMC7812Class AMC7812;
 
 #endif
