@@ -16,6 +16,8 @@ enum {
  BLINK_DELAY_MS = 500,
 };
 
+const char seperator = '+';
+
 #ifdef AMC7812_DAV_PIN
 volatile uint8_t dav_flag = 0;
 // catch DAV dips
@@ -33,13 +35,12 @@ void setup_dav(){
 }
 #endif
 
+// define my new class
+AMC7812Class AMC7812;
+
 void setup ()
 {
-  const char seperator = '+';
   Serial.begin(9600);
-
-  // define my new class
-  AMC7812Class AMC7812;
 
   // initialize device
   uint8_t ret = AMC7812.begin();
@@ -95,8 +96,6 @@ void loop(){
   Serial.println("\n\nhello");
   delay(1000);
 
-  /*
-
   uint8_t dac_chs[] = { 0, 2 };
   int16_t dac_vals[] = {0x0FFF, 0x07FF};
 
@@ -113,7 +112,7 @@ void loop(){
   }
 
   uint16_t adc_vals[AMC7812_ADC_CNT];
-  for(uint8_t i; i < 2; i++){
+  for(uint8_t j=0; j < 2; j++){
     AMC7812.ReadADC( 0 );
     // just do a dummy read of the next register to round it out
     for( uint8_t i = 1; i <= AMC7812_ADC_CNT; i++ ){
@@ -151,7 +150,17 @@ void loop(){
   for( uint16_t i = 0; i < READ_BLOCK_SIZE; i++ ){
     Serial.println(adc_vals2[i]);
   }
+}
 
+// normal arduino main function
+int main(void){
+  init();
+
+  setup();
+
+  for(;;){
+    loop();
+    if (serialEventRun) serialEventRun();
+  }
   return 0;
-  */
 }
