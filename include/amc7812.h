@@ -162,38 +162,32 @@
 
 // functions
 #include <stdint.h>
-#include <Arduino.h>
-#include <SPI.h>
-
-// return type so that we could extend to different size responses?
-// http://i.imgur.com/l3v4P3s.jpg
-typedef AMC7812_RETURN_TYPE Data ;
-typedef AMC7812_SRETURN_TYPE SData; // signed data
-typedef AMC7812_ADDR_TYPE Addr;
-typedef AMC7812_ERROR_TYPE Error;
 
 //! SPI Driver for TI AMC7812 ADC and DAC 
 /*!
- * inherits from Arduino's SPIClass
+ * detailed description
  */
-class AMC7812Class : SPIClass {
+class AMC7812Class {
   private:
-    // amc configuration registers 0&1
-    Data amc_conf[2]; 
-    // adc status register, enabled adc list
-    Data adc_status;
-    // adc status register, enabled adc list
-    Data adc_gain;
-    // last adc readings, stored here
-    Data adc_vals[AMC7812_ADC_CNT];
-    // dac status register, enabled dac list
-    Data dac_status;
-    // dac gain register
-    // Gain(0) = 2*Vref
-    // Gain(1) = 5*Vref
-    Data dac_gain;
-    // spi transfer frame
-    Data transfer ( uint8_t cmd[] );
+    uint16_t amc_conf[2]; //!< current amc configuration register values, no flags or triggers
+    uint16_t adc_status;  //!< current Enabled ADCs, bitwise storage
+    uint16_t adc_gain;    //!< current ADC gain settings, bitwise
+    uint16_t adc_vals[AMC7812_ADC_CNT]; //!< stores result of `ReadADCs()`, disabled channel default to 0
+    uint16_t dac_status;  //!< current Enabled DACs, bitwise storage
+    uint16_t dac_gain;    //!< current DAC gain settings, bitwise, Gain(0) = 2, Gain(1) = 5
+
+    //! Low-level frame transfer to chip
+    /*!
+     * \param addr is the register address to be read from or written to
+     * \param val is the value to be written to the register, value is not read for a read operation
+     * \return returns last 2-bytes as response from previous frame
+     *
+     * Low-level SPI frame transfer protocol.
+     * A frame is 3-bytes in the format: [ register address, value[15:8], value[7:0] ].
+     *
+     * _Note_: AMC7812_CS_PIN amd AMC7812_CS_PORT must be set correctly in amc7812conf.h
+     */
+    static uint16_t transfer ( uint8_t addr, uint16_t val );
 
   public:
     //! prepare device for SPI communication
@@ -206,7 +200,7 @@ class AMC7812Class : SPIClass {
      * - Configure ADCs
      * - Trigger ADC read cycle
      */
-    Error begin();
+    uint8_t begin();
 
     //! Read register value at address
     /*!
@@ -219,14 +213,14 @@ class AMC7812Class : SPIClass {
      * out response to this command.
      * Sequence define starting pg 56 datasheet.
      */
-    inline Data Read ( Addr addr ){
-      uint8_t cmd[] = { ( AMC7812_READ_MASK | addr ), 0x00, 0x00 };
-      return transfer( cmd );
+    inline static uint16_t Read ( uint8_t addr ){
+      return transfer( ( AMC7812_READ_MASK | addr ), 0x0000 );
     }
 
     //! Read register value at address
     /*!
      * \param addr is the register address to be written
+     * \param val is the 16 bit value to be written to the register
      * \return returned value is the response for the previous frame
      *
      * This is a low-level register command, it is suggested that the user use a
@@ -234,13 +228,8 @@ class AMC7812Class : SPIClass {
      * Responses are pipelined.
      * Sequence define starting pg 56 datasheet.
      */
-    // TODO: make independent of Data size?
-    inline Data Write( Addr addr, Data value  ){
-      uint8_t cmd[] = { (AMC7812_WRITE_MASK | addr), 
-        (uint8_t)(value>>8), 
-        (uint8_t)(value) 
-      };
-      return transfer( cmd );
+    inline static uint16_t Write( uint8_t addr, uint16_t val ){
+      return transfer( (AMC7812_WRITE_MASK | addr), val );
     }
 
     //=============================================================================
@@ -266,9 +255,8 @@ class AMC7812Class : SPIClass {
      * - D1 (GPIO 4&5)
      * - D2 (GPIO 6&7)
      */
-    inline Data ReadTemp( uint8_t sensor ){
-      uint8_t cmd[] = { AMC7812_READ_MASK | (AMC7812_TEMP_BASE_ADDR + sensor), 0x00, 0x00 };
-      return transfer( cmd );
+    inline static uint16_t ReadTemp( uint8_t sensor ){
+      return transfer( AMC7812_READ_MASK | (AMC7812_TEMP_BASE_ADDR + sensor), 0x0000 );
     }
 
     //=============================================================================
@@ -286,9 +274,8 @@ class AMC7812Class : SPIClass {
      * In continuous mode the ADC registers will be refreshing cyclically at the 
      * specfied rate
      */
-    inline Data ReadADC( uint8_t n ){
-      uint8_t cmd[] = { AMC7812_READ_MASK | (AMC7812_ADC_BASE_ADDR + n), 0x00, 0x00 };
-      return transfer( cmd );
+    inline uint16_t ReadADC( uint8_t n ){
+      return transfer( AMC7812_READ_MASK | (AMC7812_ADC_BASE_ADDR + n), 0x0000 );
     }
 
     //! Batch read operation, faster operatoin is possible with assumptions
@@ -298,7 +285,7 @@ class AMC7812Class : SPIClass {
      * If triggered mode, send conversion trigger and read activated ADCs.
      * Values are stored in `adc_vals` member, retrieve with `GetADCReadings()`. 
      */
-    Error ReadADCs();
+    uint8_t ReadADCs();
 
     //! Retrieve results of `ReadADCs()`
     /*! 
@@ -306,7 +293,7 @@ class AMC7812Class : SPIClass {
      * Disabled channels default to 0.
      * The index matches the channel number i.e. ADCn value is stored at `ADC[n]`.
      */
-    Data* GetADCReadings(){ return adc_vals; };
+    uint16_t* GetADCReadings(){ return adc_vals; };
 
     //! Enable ADCn
     /*!
@@ -320,7 +307,7 @@ class AMC7812Class : SPIClass {
      * signifies an enabled channel.
      * Use `GetADCStatus()` to retrieve `adc_status` member value.
      */
-    Data EnableADC ( uint8_t n );
+    uint16_t EnableADC ( uint8_t n );
 
     //! Enable All ADCs
     /*!
@@ -336,7 +323,7 @@ class AMC7812Class : SPIClass {
      * signifies an enabled channel.
      * Use `GetADCStatus()` to retrieve `adc_status` member value.
      */
-    Data EnableADCs ();
+    uint16_t EnableADCs ();
 
     //! Disable ADCn
     /*!
@@ -350,7 +337,7 @@ class AMC7812Class : SPIClass {
      * signifies an enabled channel.
      * Use `GetADCStatus()` to retrieve `adc_status` member value.
      */
-    Data DisableADC ( uint8_t n );
+    uint16_t DisableADC ( uint8_t n );
 
     //! Disable All ADCs
     /*!
@@ -366,7 +353,7 @@ class AMC7812Class : SPIClass {
      * signifies an enabled channel.
      * Use `GetADCStatus()` to retrieve `adc_status` member value.
      */
-    Data DisableADCs ();
+    uint16_t DisableADCs ();
 
     //! Get bitwise list of enabled ADC channels
     /*!
@@ -378,7 +365,7 @@ class AMC7812Class : SPIClass {
      * ADC enabled/disabled status is stored bitwise in `adc_status` a high bit
      * signifies an enabled channel.
      */
-    Data GetADCStatus (){ return adc_status; };
+    uint16_t GetADCStatus (){ return adc_status; };
 
     //! Set update mode to continuous
     /*!
@@ -393,7 +380,7 @@ class AMC7812Class : SPIClass {
      * asserted to begin the cycle even if in continuous mode.
      * See page 30 of datasheet.
      */
-    inline Data SetContinuousMode(){
+    inline uint16_t SetContinuousMode(){
       return WriteAMCConfig( 0, amc_conf[0] | (1<<AMC7812_CMODE) );
     }
 
@@ -408,7 +395,7 @@ class AMC7812Class : SPIClass {
      *
      * See page 30 of datasheet.
      */
-    inline Data SetTriggeredMode(){
+    inline uint16_t SetTriggeredMode(){
       return WriteAMCConfig( 0, amc_conf[0] & ~(1<<AMC7812_CMODE) );
     }
 
@@ -427,7 +414,7 @@ class AMC7812Class : SPIClass {
      * The actual output voltage is given by:
      * DACn = Gain * Vref * (Vsetpoint / 2**12)
      */
-    inline Data ReadDAC( uint8_t n ){
+    inline uint16_t ReadDAC( uint8_t n ){
       return Read( AMC7812_DAC_BASE_ADDR + n );
     }
 
@@ -442,7 +429,7 @@ class AMC7812Class : SPIClass {
      * The actual output voltage is given by:
      * DACn = Gain * Vref * (setpoint / 2**12)
      */
-    inline Data WriteDAC( uint8_t n, Data value ){
+    inline uint16_t WriteDAC( uint8_t n, uint16_t value ){
       return Write( AMC7812_DAC_BASE_ADDR + n, value );
     }
 
@@ -457,8 +444,26 @@ class AMC7812Class : SPIClass {
      * The actual output voltage is given by:
      * DACn = Gain * Vref * (Vsetpoint / 2**12)
      */
-    inline Data GetDACGain(){
-      return dac_gain;
+    uint16_t GetDACGains(){ return dac_gain; }
+
+    //! Read DAC gain setting from chip
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * The returned value is stored in dac_gain.
+     * To retrieve use `GetDACGain()`
+     *
+     * The DAC gain is stored bitwise with maximum output:
+     * - Gain(0) = 2*Vref
+     * - Gain(1) = 5*Vref
+     *
+     * The actual output voltage is given by:
+     * DACn = Gain * Vref * (Vsetpoint / 2**12)
+     */
+    uint16_t ReadDACGains(){
+      uint16_t response = Read( AMC7812_DAC_GAIN );
+      dac_gain = Read( AMC7812_DAC_GAIN );
+      return response;
     }
 
     //! Write gain settings for all DAC channels
@@ -477,7 +482,10 @@ class AMC7812Class : SPIClass {
      * `WriteDACGains( GetDACGain() | (1<<n) )`
      * `WriteDACGains( GetDACGain() & ~(1<<n) )`
      */
-    Data WriteDACGains ( Data value );
+    uint16_t WriteDACGains ( uint16_t value ){
+      dac_gain = 0x0FFF & value; // 12 values
+      return Write( AMC7812_DAC_GAIN, dac_gain );
+    }
 
     //=============================================================================
     // configuration registers functions
@@ -494,7 +502,7 @@ class AMC7812Class : SPIClass {
      *
      *  See page 66.
      */
-    Error  WriteAMCConfig  ( uint8_t n, Data config );
+    uint8_t WriteAMCConfig ( uint8_t n, uint16_t config );
 
     //! Trigger an ADC conversion cycle internally
     /*!
@@ -506,9 +514,10 @@ class AMC7812Class : SPIClass {
      * if not then a trigger needs to be 
      * sent each time the values need to be refreshed.
      */
-    inline Data TriggerADCsInternal(){
+    inline uint16_t TriggerADCsInternal(){
       return Write( AMC7812_AMC_CONF_0, amc_conf[0]|(1<<AMC7812_ICONV) );
     }
+
     //! Trigger an ADC conversion cycle externally
     /*!
      * Trigger the adc conversion, using the physical !CNVT pin on the chip.

@@ -9,7 +9,7 @@ include_directories("${PROJECT_BINARY_DIR}")
 include_directories("${PROJECT_INCLUDE_DIR}")
 
 ### add example executable directories
-add_avr_executable(amc7812_test amc7812_test.c)
+add_avr_executable(amc7812_test amc7812_test.cpp)
 ### add the dependant libraries
 avr_target_link_libraries(amc7812_test AMC7812)
-avr_target_link_libraries(amc7812_test USART)
+avr_target_link_libraries(amc7812_test ARDUINO)

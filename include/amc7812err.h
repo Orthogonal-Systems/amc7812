@@ -18,5 +18,6 @@
 #define AMC7812_DEV_ID_ERR    0x01 // device id does not match (comms failed or wrong device)
 #define AMC7812_PARAM_OOR_ERR 0x02 // parameter out of range
 #define AMC7812_WRITE_ERR     0x03 // read confirmation did not match written value
+#define AMC7812_TIMEOUT_ERR   0x04 // an operation timed out
 
 #endif
