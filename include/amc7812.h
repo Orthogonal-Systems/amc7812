@@ -160,6 +160,11 @@
 #define AMC7812_READ_MASK  0x80 // mask for read operations on addr byte
 #define AMC7812_WRITE_MASK 0x00 // mask for write operations on addr byte
 
+#define AMC7812_ADC_GAIN_HIGH 2
+#define AMC7812_ADC_GAIN_LOW  1
+#define AMC7812_DAC_GAIN_HIGH 5
+#define AMC7812_DAC_GAIN_LOW  2
+
 // functions
 #include <stdint.h>
 
@@ -192,6 +197,7 @@ class AMC7812Class {
   public:
     //! prepare device for SPI communication
     /*!
+     * \return error code, see amc7812err.h, 0 for no error
      * Tasks to be performed:
      * - Reset device
      * - Setup uC SPI interface
@@ -280,6 +286,8 @@ class AMC7812Class {
 
     //! Batch read operation, faster operatoin is possible with assumptions
     /*! 
+     * \return error code, 0 is no error
+     *
      * Function is provided to conveniently measure the enabled ADC channels.
      * If continuous mode, write conversion flag to status register and read ADCs.
      * If triggered mode, send conversion trigger and read activated ADCs.
@@ -294,6 +302,60 @@ class AMC7812Class {
      * The index matches the channel number i.e. ADCn value is stored at `ADC[n]`.
      */
     uint16_t* GetADCReadings(){ return adc_vals; };
+
+    //! Read ADC gain setting
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * The ADC gain is stored bitwise with maximum output:
+     * - Gain(0) = 1*Vref
+     * - Gain(1) = 2*Vref
+     *
+     * The actual input voltage is given by:
+     * ADCn = Gain * Vref * (Vsetpoint / 2**12)
+     */
+    uint16_t GetADCGains(){ return adc_gain; }
+
+    //! Read ADC gain setting from chip
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * The returned value is stored in adc_gain.
+     * To retrieve use `GetADCGain()`
+     *
+     * The ADC gain is stored bitwise with maximum input:
+     * - Gain(0) = 1*Vref
+     * - Gain(1) = 2*Vref
+     *
+     * The actual input voltage is given by:
+     * ADCn = Gain * Vref * (Vsetpoint / 2**12)
+     */
+    uint16_t ReadADCGains(){
+      uint16_t response = Read( AMC7812_ADC_GAIN );
+      adc_gain = Read( AMC7812_ADC_GAIN );
+      return response;
+    }
+
+    //! Write gain settings for all ADC channels
+    /*!
+     * \param value is the bitwise ADC gain setting for all channels
+     * \return returned value is the response for the previous frame
+     *
+     * The ADC gain is stored bitwise with maximum input:
+     * - Gain(0) = 1*Vref
+     * - Gain(1) = 2*Vref
+     *
+     * The actual input voltage is given by:
+     * ADCn = Gain * Vref * (Vsetpoint / 2**12)
+     *
+     * If only a single channel is changed:
+     * `WriteADCGains( GetADCGain() | (1<<n) )`
+     * `WriteADCGains( GetADCGain() & ~(1<<n) )`
+     */
+    uint16_t WriteADCGains ( uint16_t value ){
+      adc_gain = value;
+      return Write( AMC7812_ADC_GAIN, adc_gain );
+    }
 
     //! Enable ADCn
     /*!

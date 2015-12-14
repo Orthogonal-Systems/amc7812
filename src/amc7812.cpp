@@ -105,12 +105,19 @@ uint8_t AMC7812Class::begin(){
   SPCR = (1<<SPE)|(1<<MSTR)|(1<<CPHA); // 4x prescalar
   SPSR = (1<<SPI2X); // double time
  
-  // setup !convert pin if attached
-#ifdef AMC7812_CNVT_PIN
+  
+#ifdef AMC7812_CNVT_PIN // setup !convert pin if attached
   #pragma message "External Triggering is enabled for AMC7812"
   AMC7812_CNVT_DDR |= (1<<AMC7812_CNVT_PIN);
 #else
   #pragma message "External Triggering is disabled for AMC7812"
+#endif
+
+#ifdef AMC7812_DAV_PIN // setup data available pin if attached
+  #pragma message "External Data Available pin is enabled for AMC7812"
+  AMC7812_DAV_DDR &= ~(1<<AMC7812_DAV_PIN);  // data available pin is input
+#else
+  #pragma message "External Data Available pin is disabled for AMC7812"
 #endif
 
   // reset device
