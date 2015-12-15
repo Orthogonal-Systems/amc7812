@@ -21,12 +21,19 @@
 #include <Arduino.h>
 #include <SPI.h>
 
+#define AMC7812_TIMEOUT_CONV_CYCLS 16000 // 1 ms at 16 MHz clock, ignoring overhead
+
+// VOLTAGE REFERENCE
+// store as string since we dont want to do fp math
+#define AMC7812_INT_AVREF "2.5"
+#define AMC7812_AVREF AMC7812_INT_AVREF
+
 // SPI SPEED
 #define AMC7812_SPI_MODE SPI_MODE1
 #define AMC7812_SPI_RATE SPI_CLOCK_DIV4 // can go up to 2
 
 // AMC7812 SPI port
-#define AMC7812_SPI_PORT  
+#define AMC7812_SPI_PORT  PORTB
 #define AMC7812_SPI_DDR   DDRB
 #define AMC7812_SPI_SCLK  5
 #define AMC7812_SPI_MISO  4
@@ -47,10 +54,10 @@
 #define AMC7812_RST_PIN   1    // UNO pin 9
 
 // REQUIRED: data available flag (comment out if not connected)
-//#define AMC7812_DAV_PORT  PORTD
-//#define AMC7812_DAV_DDR   DDRD
-//#define AMC7812_DAV_PIN   2    // UNO pin ?
-//#define AMC7812_DAV_INT   INT0 // comment out if not connected to interrupt pin
+#define AMC7812_DAV_PORT  PORTD
+#define AMC7812_DAV_DDR   DDRD
+#define AMC7812_DAV_PIN   2    // UNO pin ?
+#define AMC7812_DAV_INT   INT0 // comment out if not connected to interrupt pin
 
 // OPTIONAL: conversion trigger (comment out if not connected)
 #define AMC7812_CNVT_PORT PORTB

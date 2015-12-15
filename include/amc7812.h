@@ -165,6 +165,8 @@
 #define AMC7812_DAC_GAIN_HIGH 5
 #define AMC7812_DAC_GAIN_LOW  2
 
+#define AMC7812_TIMEOUT_CONV_CYCLS 16000 // 1 ms at 16 MHz clock, ignoring overhead
+
 // functions
 #include <stdint.h>
 
@@ -180,6 +182,15 @@ class AMC7812Class {
     uint16_t adc_vals[AMC7812_ADC_CNT]; //!< stores result of `ReadADCs()`, disabled channel default to 0
     uint16_t dac_status;  //!< current Enabled DACs, bitwise storage
     uint16_t dac_gain;    //!< current DAC gain settings, bitwise, Gain(0) = 2, Gain(1) = 5
+
+    //! SPI control register value for communication
+    /*!
+     *  Enable bit, Master bit, 4X prescalar, clock/data phase
+     *  If `amc_spsr` is set to double time then 2X prescalar
+     */
+    static const uint8_t amc_spcr = (1<<SPE)|(1<<MSTR)|(1<<CPHA)|(1<<SPR1); 
+    //! SPI status register value (holds 2X status bit)
+    static const uint8_t amc_spsr = 0;//(1<<SPI2X);  
 
     //! Low-level frame transfer to chip
     /*!
@@ -207,6 +218,34 @@ class AMC7812Class {
      * - Trigger ADC read cycle
      */
     uint8_t begin();
+
+    //! Get the correct SPI control register value for communication
+    /*!
+     * \return default SPCR setting for AMC7812 communication
+     * 
+     * Intended use case is switching between multiple devices on a bus wih 
+     * different settings
+     *  
+     * uint8_t old_spcr = SPCR;
+     * SPCR = myclass.GetSPCR();
+     * `do stuff`
+     * SPCR = old_spcr;
+     */
+    static const uint8_t GetSPCR(){ return amc_spcr; }
+
+    //! Get the correct SPI status register value for communication
+    /*!
+     * \return default SPSR setting for AMC7812 communication
+     * 
+     * Intended use case is switching between multiple devices on a bus with
+     * different settings
+     *  
+     * uint8_t old_spcr = SPSR;
+     * SPSR = myclass.GetSPSR();
+     * `do stuff`
+     * SPSR = old_spcr;
+     */
+    static const uint8_t GetSPSR(){ return amc_spsr; }
 
     //! Read register value at address
     /*!

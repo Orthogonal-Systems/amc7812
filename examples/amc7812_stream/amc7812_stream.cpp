@@ -6,10 +6,11 @@
 #include <UIPEthernet.h>
 
 #define UDP_TX_PACKET_MAX_SIZE 24           // from normal arduino ethernetudp.h
-#define DHCP 1                              // if static comment
+//#define DHCP 1                              // if static comment
 #define LOCAL_PORT  5000
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE}; //Assign a mac address
+IPAddress ip(169,254,5,12); //Assign my IP adress
 //unsigned int localPort = 5000;              //Assign a Port to talk over
 char packetBuffer[UDP_TX_PACKET_MAX_SIZE];  // data buffer
 String datReq;                              // String for our data
@@ -24,21 +25,25 @@ String JSONPair(String member, String value){
 }
 
 void addReadings(){
+  uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
+  SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
   uint32_t ts_start = micros();                   // time start at start, us
   uint8_t conv_success = AMC7812.ReadADCs();      // perform conversion cycle on active ADCs
   uint16_t* readings = AMC7812.GetADCReadings();  // retrieve results of the read
-  uint16_t adc_gains = AMC7812.GetADCGains();
+  uint16_t adc_gains = AMC7812.GetADCGains();     // get ADC gains
+  SPCR = spcr;  // leave no trace
 
   // build up json formated data packet to send
   Udp.print("{");
   Udp.print( JSONPair("time_us", String(ts_start)) );
   Udp.print( JSONPair("status", String(AMC7812.GetADCStatus())) );
+  Udp.print( JSONPair("avref", AMC7812_AVREF) ); // analog voltage reference
   Udp.print( JSONPair("gain", String(adc_gains)) );
   if( conv_success > 0 ){
     Udp.print("readings:{");
     for(uint8_t i=0; i<AMC7812_ADC_CNT; i++){
       uint16_t gain = AMC7812_ADC_GAIN_HIGH;
-      if(adc_gains & (1<<i)){
+      if(!(adc_gains & (1<<i))){
         gain = AMC7812_ADC_GAIN_LOW;
       }
       Udp.print( JSONPair(String(i), String(gain * readings[i])) );

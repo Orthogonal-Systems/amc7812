@@ -95,15 +95,15 @@ uint8_t AMC7812Class::begin(){
   AMC7812_CS_DDR  |= (1<<AMC7812_CS_PIN);   // then set as output
 //#if ( (AMC7812_CS_PORT != AMC7812_SS_PORT) & (AMC7812_CS_PIN != AMC7812_SPI_SS) )
   // SS _HAS_ to be an output, else chip will enter slave mode on low input
-  AMC7812_SPI_PORT |= (1<<AMC7812_SPI_SS);
+  AMC7812_SPI_PORT |= (1<<AMC7812_HWCS_PIN);
 //#endif
   // set up SCLK, MOSI, MISO, and SS as outputs, and enambles SPI as master
   // set MOSI & SCK & CS as output
-  AMC7812_SPI_DDR = _BV(AMC7812_SPI_SCLK) | _BV(AMC7812_SPI_MOSI) | _BV(AMC7812_SPI_SS);
+  AMC7812_SPI_DDR = _BV(AMC7812_SPI_SCLK) | _BV(AMC7812_SPI_MOSI) | _BV(AMC7812_HWCS_PIN);
   // setup spi status register, SPI mode 1
   // prescalar 2, f/2
-  SPCR = (1<<SPE)|(1<<MSTR)|(1<<CPHA); // 4x prescalar
-  SPSR = (1<<SPI2X); // double time
+  SPCR = amc_spcr;
+  SPSR = amc_spsr;
  
   
 #ifdef AMC7812_CNVT_PIN // setup !convert pin if attached
