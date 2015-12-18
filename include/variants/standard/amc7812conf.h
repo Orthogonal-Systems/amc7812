@@ -55,6 +55,6 @@
 // OPTIONAL: conversion trigger (comment out if not connected)
 #define AMC7812_CNVT_PORT PORTB
 #define AMC7812_CNVT_DDR  DDRB
-#define AMC7812_CVNT_PIN  0    // UNO pin 8
+#define AMC7812_CNVT_PIN  0    // UNO pin 8
 
 #endif

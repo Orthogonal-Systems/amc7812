@@ -169,6 +169,7 @@
 
 // functions
 #include <stdint.h>
+#include "amc7812conf.h"
 
 //! SPI Driver for TI AMC7812 ADC and DAC 
 /*!
@@ -188,9 +189,9 @@ class AMC7812Class {
      *  Enable bit, Master bit, 4X prescalar, clock/data phase
      *  If `amc_spsr` is set to double time then 2X prescalar
      */
-    static const uint8_t amc_spcr = (1<<SPE)|(1<<MSTR)|(1<<CPHA)|(1<<SPR1); 
+    static const uint8_t amc_spcr = (1<<SPE)|(1<<MSTR)|(1<<CPHA);//|(1<<SPR1); 
     //! SPI status register value (holds 2X status bit)
-    static const uint8_t amc_spsr = 0;//(1<<SPI2X);  
+    static const uint8_t amc_spsr = (1<<SPI2X);  
 
     //! Low-level frame transfer to chip
     /*!
@@ -633,8 +634,8 @@ class AMC7812Class {
      */
 #ifdef AMC7812_CNVT_PIN
     inline void TriggerADCsExternal(){
-      AMC7812_CNVT_PORT &= ~(1<<AMC7812_CNVT_PIN0; // low
-      AMC7812_CNVT_PORT |= (1<<AMC7812_CNVT_PIN0;  // high
+      AMC7812_CNVT_PORT &= ~(1<<AMC7812_CNVT_PIN); // low
+      AMC7812_CNVT_PORT |= (1<<AMC7812_CNVT_PIN);  // high
     }
 #endif
 };

@@ -109,6 +109,7 @@ uint8_t AMC7812Class::begin(){
 #ifdef AMC7812_CNVT_PIN // setup !convert pin if attached
   #pragma message "External Triggering is enabled for AMC7812"
   AMC7812_CNVT_DDR |= (1<<AMC7812_CNVT_PIN);
+  AMC7812_CNVT_PORT |= (1<<AMC7812_CNVT_PIN);
 #else
   #pragma message "External Triggering is disabled for AMC7812"
 #endif

@@ -18,7 +18,7 @@ enum {
 
 const char seperator = '+';
 
-#ifdef AMC7812_DAV_PIN
+#ifdef AMC7812_DAV_INT
 volatile uint8_t dav_flag = 0;
 // catch DAV dips
 ISR(INT0_vect){
@@ -52,7 +52,7 @@ void setup ()
   }
   Serial.println("AMC7812 device initialized.");
 
-#ifdef AMC7812_DAV_PIN
+#ifdef AMC7812_DAV_INT
   setup_dav();
   Serial.println("waiting for dav trigger");
   // have to hook up dav to get this working
@@ -64,6 +64,7 @@ void setup ()
 
   cli(); // clear global interrupts since it messes with the spi timing
 #endif
+  // TODO: add dav polling
 
   // list of registers and default responses for testing
   // last byte is for dummy read

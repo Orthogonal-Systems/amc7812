@@ -55,6 +55,6 @@
 // OPTIONAL: conversion trigger (comment out if not connected)
 #define AMC7812_CNVT_PORT PORTL
 #define AMC7812_CNVT_DDR  DDRL
-#define AMC7812_CVNT_PIN  3    // mega pin 46
+#define AMC7812_CNVT_PIN  3    // mega pin 46
 
 #endif
