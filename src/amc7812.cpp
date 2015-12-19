@@ -149,12 +149,13 @@ uint8_t AMC7812Class::begin(){
   }
 
   // turn on DAC output on all channels
-  uint16_t pwr_dwn_reg = 0x7FFE;
-  Write( AMC7812_POWER_DOWN, pwr_dwn_reg );
+  pd_reg = 0x7FFE;
+  dac_status = 0x0FFF; 
+  Write( AMC7812_POWER_DOWN, pd_reg );
   Read( AMC7812_POWER_DOWN );
   response = Read( 0x00 );
   // check that dac gain has been set low
-  if( response != pwr_dwn_reg ){
+  if( response != pd_reg ){
     return AMC7812_WRITE_ERR;
   }
 
@@ -340,6 +341,34 @@ uint16_t AMC7812Class::DisableADCs(){
 //==============================================================================
 // DAC FUNCTIONS
 //==============================================================================
+
+uint16_t AMC7812Class::EnableDAC (uint8_t n){
+  if( n < AMC7812_DAC_CNT ){
+    pd_reg |= (1<<(12-n));
+    dac_status |= (1<<n);
+  }
+  return Write( AMC7812_POWER_DOWN, pd_reg );
+}
+
+uint16_t AMC7812Class::EnableDACs (){
+  pd_reg |= 0x1FFE;
+  dac_status = 0x0FFF;
+  return Write( AMC7812_POWER_DOWN, pd_reg );
+}
+
+uint16_t AMC7812Class::DisableDAC (uint8_t n){
+  if( n < AMC7812_DAC_CNT ){
+    pd_reg &= ~(1<<(12-n));
+    dac_status &= ~(1<<n);
+  }
+  return Write( AMC7812_POWER_DOWN, pd_reg );
+}
+
+uint16_t AMC7812Class::DisableDACs (){
+  pd_reg &= ~0x1FFE;
+  dac_status = 0x0000;
+  return Write( AMC7812_POWER_DOWN, pd_reg );
+}
 
 //==============================================================================
 // CONFIGURATION REGISTERS FUNCTIONS

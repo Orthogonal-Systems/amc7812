@@ -168,6 +168,7 @@
 #define AMC7812_TIMEOUT_CONV_CYCLS 16000 // 1 ms at 16 MHz clock, ignoring overhead
 
 // functions
+#include <avr/io.h>
 #include <stdint.h>
 #include "amc7812conf.h"
 
@@ -182,6 +183,7 @@ class AMC7812Class {
     uint16_t adc_gain;    //!< current ADC gain settings, bitwise
     uint16_t adc_vals[AMC7812_ADC_CNT]; //!< stores result of `ReadADCs()`, disabled channel default to 0
     uint16_t dac_status;  //!< current Enabled DACs, bitwise storage
+    uint16_t pd_reg;      //!< current functionality powered, see pg 79
     uint16_t dac_gain;    //!< current DAC gain settings, bitwise, Gain(0) = 2, Gain(1) = 5
 
     //! SPI control register value for communication
@@ -589,6 +591,79 @@ class AMC7812Class {
       return Write( AMC7812_DAC_GAIN, dac_gain );
     }
 
+    //! Get bitwise list of enabled DAC channels
+    /*!
+     * \return returned value is the bitwise enabled dac channel member `adc_status`
+     *
+     * Enabled DACs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * DAC enabled/disabled status is stored bitwise in `dac_status` a high bit
+     * signifies an enabled channel.
+     */
+    uint16_t GetDACStatus (){ return dac_status; };
+
+    //! Enable DACn
+    /*!
+     * \param n is an integer between 0 and 15 (a check is performed) to enable DACn
+     * \return returned value is the response for the previous frame
+     *
+     * Enabled DACs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * DAC enabled/disabled status is stored bitwise in `dac_status` a high bit
+     * signifies an enabled channel.
+     * Use `GetDACStatus()` to retrieve `dac_status` member value.
+     */
+    uint16_t EnableDAC ( uint8_t n );
+
+    //! Enable All DACs
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * _Note_ this operation requires two frames to set all values.
+     * The returned value is from the command preceeding both.
+     *
+     * Enabled DACs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * DAC enabled/disabled status is stored bitwise in `dac_status` a high bit
+     * signifies an enabled channel.
+     * Use `GetDACStatus()` to retrieve `dac_status` member value.
+     */
+    uint16_t EnableDACs ();
+
+    //! Disable DACn
+    /*!
+     * \param n is an integer between 0 and 15 (a check is performed) to disable DACn
+     * \return returned value is the response for the previous frame
+     *
+     * Enabled DACs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * DAC enabled/disabled status is stored bitwise in `dac_status` a high bit
+     * signifies an enabled channel.
+     * Use `GetDACStatus()` to retrieve `dac_status` member value.
+     */
+    uint16_t DisableDAC ( uint8_t n );
+
+    //! Disable All DACs
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * _Note_ this operation requires two frames to set all values.
+     * The returned value is from the command preceeding both.
+     *
+     * Enabled DACs are recorded everytime a reading is triggered.
+     * If faster reads are required, disable unused channels to decrease cycle time
+     * and latency.
+     * DAC enabled/disabled status is stored bitwise in `dac_status` a high bit
+     * signifies an enabled channel.
+     * Use `GetDACStatus()` to retrieve `dac_status` member value.
+     */
+    uint16_t DisableDACs ();
+
+
     //=============================================================================
     // configuration registers functions
     //=============================================================================
@@ -638,8 +713,16 @@ class AMC7812Class {
       AMC7812_CNVT_PORT |= (1<<AMC7812_CNVT_PIN);  // high
     }
 #endif
-};
 
-//extern AMC7812Class AMC7812;
+    //! Simultaneously update DAC outputs
+    /*!
+     *  Sends ILDAC bit to AMC config register to udpate all the DAC output
+     *  simultaneously
+     */
+    inline uint16_t UpdateDAC(){
+      return Write( AMC7812_AMC_CONF_0, amc_conf[0]|(1<<AMC7812_ILDAC) );
+    }
+
+};
 
 #endif
