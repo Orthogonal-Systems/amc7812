@@ -343,7 +343,7 @@ class AMC7812Class {
      * Disabled channels default to 0.
      * The index matches the channel number i.e. ADCn value is stored at `ADC[n]`.
      */
-    uint16_t* GetADCReadings(){ return adc_vals; };
+    const uint16_t* GetADCReadings() const { return adc_vals; };
 
     //! Read ADC gain setting
     /*!
@@ -484,7 +484,7 @@ class AMC7812Class {
      * asserted to begin the cycle even if in continuous mode.
      * See page 30 of datasheet.
      */
-    inline uint16_t SetContinuousMode(){
+    inline uint16_t SetContinuousADCMode(){
       return WriteAMCConfig( 0, amc_conf[0] | (1<<AMC7812_CMODE) );
     }
 
@@ -499,7 +499,7 @@ class AMC7812Class {
      *
      * See page 30 of datasheet.
      */
-    inline uint16_t SetTriggeredMode(){
+    inline uint16_t SetTriggeredADCMode(){
       return WriteAMCConfig( 0, amc_conf[0] & ~(1<<AMC7812_CMODE) );
     }
 
@@ -663,6 +663,31 @@ class AMC7812Class {
      */
     uint16_t DisableDACs ();
 
+    //! Set dac update mode to continuous
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * In continuous mode, the chip asynchronously updates the relevant DAC
+     * output whenever a DAC output register is wirtten to.
+     *
+     * See page 75 of datasheet.
+     */
+    inline uint16_t SetContinuousDACMode(){
+      return Write( AMC7812_DAC_CONF, 0x0000 );
+    }
+
+    //! Set dac update mode to triggered
+    /*!
+     * \return returned value is the response for the previous frame
+     *
+     * In triggered mode, the chip synchronously updates the DAC
+     * outputs whenever the ILDAC register or pin is activated.
+     *
+     * See page 75 of datasheet.
+     */
+    inline uint16_t SetTriggeredDACMode(){
+      return Write( AMC7812_DAC_CONF, 0x0FFF );
+    }
 
     //=============================================================================
     // configuration registers functions

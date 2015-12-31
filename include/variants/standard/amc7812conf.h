@@ -49,8 +49,8 @@
 // REQUIRED: data available flag (comment out if not connected)
 #define AMC7812_DAV_PORT  PORTD
 #define AMC7812_DAV_DDR   DDRD
-#define AMC7812_DAV_PIN   2    // UNO pin ?
-#define AMC7812_DAV_INT   INT0 // comment out if not connected to interrupt pin
+#define AMC7812_DAV_PIN   2    // UNO pin 2
+//#define AMC7812_DAV_INT   INT0 // comment out if not connected to interrupt pin
 
 // OPTIONAL: conversion trigger (comment out if not connected)
 #define AMC7812_CNVT_PORT PORTB

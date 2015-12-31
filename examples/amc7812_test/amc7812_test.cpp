@@ -9,7 +9,7 @@
 #include "amc7812.h"
 #include "amc7812conf.h"
 
-#define READ_ADC_REG 6
+#define READ_ADC_REG 0
 #define READ_BLOCK_SIZE 512
 
 enum {
@@ -104,7 +104,7 @@ void loop(){
   Serial.print(seperator);
   Serial.print(seperator);
   for( uint8_t i = 0; i < sizeof(dac_chs); i++ ){
-    Serial.printf("attempting to set DAC Ch %.2d to %d mV.", dac_chs[i], dac_vals[i] + dac_vals[i]/5 );
+    Serial.printf("attempting to set DAC Ch %.2d to %d mV.\n", dac_chs[i], dac_vals[i] + dac_vals[i]/5 );
   }
   
   // send first read
@@ -139,6 +139,7 @@ void loop(){
 
   // retrigger since I turned them off
   AMC7812.TriggerADCsInternal();
+  delay(1);
 
   AMC7812.ReadADC(READ_ADC_REG);
   for( uint16_t i = 0; i < READ_BLOCK_SIZE; i++ ){
@@ -151,6 +152,8 @@ void loop(){
   for( uint16_t i = 0; i < READ_BLOCK_SIZE; i++ ){
     Serial.println(adc_vals2[i]);
   }
+
+  AMC7812.EnableADCs();
 }
 
 // normal arduino main function
