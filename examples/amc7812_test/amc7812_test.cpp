@@ -94,8 +94,7 @@ void setup ()
 }
 
 void loop(){
-  Serial.println("\n\nhello");
-  delay(1000);
+  delay(5000);
 
   uint8_t dac_chs[] = { 0, 2 };
   int16_t dac_vals[] = {0x0FFF, 0x07FF};
@@ -104,7 +103,7 @@ void loop(){
   Serial.print(seperator);
   Serial.print(seperator);
   for( uint8_t i = 0; i < sizeof(dac_chs); i++ ){
-    Serial.printf("attempting to set DAC Ch %.2d to %d mV.", dac_chs[i], dac_vals[i] + dac_vals[i]/5 );
+    Serial.printf("attempting to set DAC Ch %.2d to %d mV.\n", dac_chs[i], dac_vals[i] + dac_vals[i]/5 );
   }
   
   // send first read
@@ -123,11 +122,11 @@ void loop(){
     for( uint8_t i = 0; i < AMC7812_ADC_CNT; i++ ){
       Serial.printf("ADC[%.2d]: 0x%.3X\n", i, adc_vals[i]);
     }
-    Serial.print(seperator);
+    Serial.println(seperator);
     _delay_ms(5000);
   }
 
-  Serial.printf("stopping all channel reads\n");
+  Serial.printf("\nstopping all channel reads\n");
   AMC7812.DisableADCs();
   Serial.printf("switching to channel %d ADC reads only\n",READ_ADC_REG);
   AMC7812.EnableADC(READ_ADC_REG);
@@ -151,6 +150,9 @@ void loop(){
   for( uint16_t i = 0; i < READ_BLOCK_SIZE; i++ ){
     Serial.println(adc_vals2[i]);
   }
+  
+  AMC7812.EnableADCs();
+  AMC7812.TriggerADCsExternal();
 }
 
 // normal arduino main function

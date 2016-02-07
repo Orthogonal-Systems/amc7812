@@ -38,9 +38,9 @@
 // AMC7812 control 
 
 // REQUIRED: actual chip select pin, change here
-#define AMC7812_CS_PORT   PORTL
-#define AMC7812_CS_DDR    DDRL
-#define AMC7812_CS_PIN    0     // mega pin 49
+#define AMC7812_CS_PORT   PORTG
+#define AMC7812_CS_DDR    DDRG
+#define AMC7812_CS_PIN    0     // mega pin 41
 // REQUIRED:reset pin
 #define AMC7812_RST_PORT  PORTL
 #define AMC7812_RST_DDR   DDRL
@@ -49,12 +49,28 @@
 // OPTIONAL: data available flag (comment out if not connected)
 #define AMC7812_DAV_PORT  PORTL
 #define AMC7812_DAV_DDR   DDRL
-#define AMC7812_DAV_PIN   2    // mega pin 47
+#define AMC7812_DAV_PIN   3    // mega pin 46
 //#define AMC7812_DAV_INT   INT0 // comment out if not connected to interrupt pin
 
 // OPTIONAL: conversion trigger (comment out if not connected)
 #define AMC7812_CNVT_PORT PORTL
 #define AMC7812_CNVT_DDR  DDRL
-#define AMC7812_CNVT_PIN  3    // mega pin 46
+#define AMC7812_CNVT_PIN  6    // mega pin 43
+
+// OPTIONAL: alarm (comment out if not connected)
+#define AMC7812_ALARM_PORT  PORTL
+#define AMC7812_ALARM_DDR   DDRL
+#define AMC7812_ALARM_PIN   2    // mega pin 47
+//#define AMC7812_ALARM_INT   INT0 // comment out if not connected to interrupt pin
+
+// OPTIONAL: dac clear 0 (comment out if not connected)
+#define AMC7812_DAC_CLR_0_PORT PORTL
+#define AMC7812_DAC_CLR_0_DDR  DDRL
+#define AMC7812_DAC_CLR_0_PIN  4    // mega pin 45
+
+// OPTIONAL: dac clear 1 (comment out if not connected)
+#define AMC7812_DAC_CLR_1_PORT PORTL
+#define AMC7812_DAC_CLR_1_DDR  DDRL
+#define AMC7812_DAC_CLR_1_PIN  5    // mega pin 44
 
 #endif
