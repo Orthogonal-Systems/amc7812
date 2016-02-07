@@ -191,14 +191,17 @@ uint8_t AMC7812Class::ReadADCs(){
 #endif
     // wait for data available, polling
     // TODO: timeout cycles should have prefactor based on conversion speed 
-    //_delay_us(5);
     // setting and clock frequency
-    //for(uint16_t i=0; i<AMC7812_TIMEOUT_CONV_CYCLS; i++){
-    //  if ( !(AMC7812_DAV_PORT & (1<<AMC7812_DAV_PIN)) ){ break; }
-    //}
-    _delay_us(50);
-    if ( (AMC7812_DAV_PORT & (1<<AMC7812_DAV_PIN)) ){ return AMC7812_TIMEOUT_ERR; }
-    //return AMC7812_TIMEOUT_ERR;
+    uint8_t error = 1;
+    for(uint16_t i=0; i<(uint16_t)AMC7812_TIMEOUT_CONV_CYCLS; i++){
+      if ( !(AMC7812_DAV_PORT & (1<<AMC7812_DAV_PIN)) ){ 
+        error = 0;
+        break; 
+      }
+    }
+    if (error){
+      return AMC7812_TIMEOUT_ERR;
+    }
   }
 
   int8_t last_valid = -1;
