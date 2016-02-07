@@ -9,7 +9,7 @@
 #include "amc7812.h"
 #include "amc7812conf.h"
 
-#define READ_ADC_REG 6
+#define READ_ADC_REG 0
 #define READ_BLOCK_SIZE 512
 
 enum {
@@ -138,6 +138,7 @@ void loop(){
 
   // retrigger since I turned them off
   AMC7812.TriggerADCsInternal();
+  delay(1);
 
   AMC7812.ReadADC(READ_ADC_REG);
   for( uint16_t i = 0; i < READ_BLOCK_SIZE; i++ ){
@@ -150,9 +151,14 @@ void loop(){
   for( uint16_t i = 0; i < READ_BLOCK_SIZE; i++ ){
     Serial.println(adc_vals2[i]);
   }
+<<<<<<< HEAD
   
   AMC7812.EnableADCs();
   AMC7812.TriggerADCsExternal();
+=======
+
+  AMC7812.EnableADCs();
+>>>>>>> cf0001054aebbac2ce2db346108d5c737bab9866
 }
 
 // normal arduino main function

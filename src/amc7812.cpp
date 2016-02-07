@@ -39,7 +39,7 @@
   *
   * _Note_: AMC7812_CS_PIN amd AMC7812_CS_PORT must be set correctly in amc7812conf.h
   */
-uint16_t AMC7812Class::transfer ( uint8_t cmd, uint16_t data ){
+uint16_t AMC7812Class::transfer ( const uint8_t cmd, const uint16_t data ){
   // avr is little endian
   union { uint16_t val; struct { uint8_t lsb; uint8_t msb; }; } in, out;
   in.val = data;
@@ -236,7 +236,7 @@ uint8_t AMC7812Class::ReadADCs(){
   * signifies an enabled channel.
   * Use `GetADCStatus()` to retrieve `adc_status` member value.
   */
-uint16_t AMC7812Class::EnableADC( uint8_t n ){
+uint16_t AMC7812Class::EnableADC( const uint8_t n ){
   uint16_t setval = 0; // if n out-of-range setval=0 and nothing happens
   // stupid register struture makes this crappy, pg 71 
   if( n < 13 ){
@@ -294,7 +294,7 @@ uint16_t AMC7812Class::EnableADCs(){
   * signifies an enabled channel.
   * Use `GetADCStatus()` to retrieve `adc_status` member value.
   */
-uint16_t AMC7812Class::DisableADC( uint8_t n ){
+uint16_t AMC7812Class::DisableADC( const uint8_t n ){
   uint16_t setval = 0; // if n out-of-range setval=0 and nothing happens
   // stupid register struture makes this crappy, pg 71 
   if( n < 13 ){
@@ -348,7 +348,7 @@ uint16_t AMC7812Class::DisableADCs(){
 // DAC FUNCTIONS
 //==============================================================================
 
-uint16_t AMC7812Class::EnableDAC (uint8_t n){
+uint16_t AMC7812Class::EnableDAC ( const uint8_t n ){
   if( n < AMC7812_DAC_CNT ){
     pd_reg |= (1<<(12-n));
     dac_status |= (1<<n);
@@ -362,7 +362,7 @@ uint16_t AMC7812Class::EnableDACs (){
   return Write( AMC7812_POWER_DOWN, pd_reg );
 }
 
-uint16_t AMC7812Class::DisableDAC (uint8_t n){
+uint16_t AMC7812Class::DisableDAC ( const uint8_t n ){
   if( n < AMC7812_DAC_CNT ){
     pd_reg &= ~(1<<(12-n));
     dac_status &= ~(1<<n);
@@ -391,7 +391,7 @@ uint16_t AMC7812Class::DisableDACs (){
   *
   *  See page 66.
   */
-uint8_t AMC7812Class::WriteAMCConfig( uint8_t n, uint16_t config ){
+uint8_t AMC7812Class::WriteAMCConfig( const uint8_t n, uint16_t config ){
   // only save (R/W) values not flags or trigger values (ICONV & ILDAC)
   switch(n){
     case 0:
