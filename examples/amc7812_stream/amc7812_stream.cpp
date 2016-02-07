@@ -36,12 +36,11 @@ void addReadings(){
   uint8_t conv_success = AMC7812.ReadADCs();      // perform conversion cycle on active ADCs
   uint16_t* readings = AMC7812.GetADCReadings();  // retrieve results of the read
   uint16_t adc_gains = AMC7812.GetADCGains();     // get ADC gains
+  //AMC7812.TriggerADCsExternal();
   SPCR = spcr;  // leave no trace
 
   Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());  //Initialize Packet send
   Udp.print( JSONPair(String(ts_start), String(conv_success)) );
-  //Udp.print( JSONPair("0", String(reading)) );
-  // build up json formated data packet to send
   
   Udp.print("{");
   Udp.print( JSONPair("time_us", String(ts_start)) );
@@ -81,7 +80,7 @@ void setup ()
     ret = AMC7812.begin();
   }
   // enter triggered mode
-  //AMC7812.SetTriggeredMode();
+  AMC7812.SetTriggeredMode();
   Serial.println("AMC7812 device initialized");
 
   // initialize ethernet device
@@ -95,6 +94,7 @@ void setup ()
       ;
   }
 #else
+  Serial.println("Configuring Ethernet using STATIC ip...");
   Ethernet.begin(mac, ip); //Initialize Ethernet with static ip
 #endif
 
