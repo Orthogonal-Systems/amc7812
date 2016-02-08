@@ -34,3 +34,6 @@ main
 
 # tmp files
 *.swp
+
+#data files
+*.dat
