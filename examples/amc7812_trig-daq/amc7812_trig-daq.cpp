@@ -9,6 +9,7 @@
 #define UDP_TX_PACKET_MAX_SIZE 24           // from normal arduino ethernetudp.h
 #define DHCP 1                              // if static comment
 #define LOCAL_PORT  5000
+//#define DEBUG 1
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE}; //Assign a mac address
 //IPAddress ip(169,254,5,12); //Assign my IP adress
@@ -51,9 +52,9 @@ void addReadings(){
   
   Udp.print("{");
   Udp.print( JSONPair("time_us", String(ts_start)) );
-  Udp.print( JSONPair("status", String(AMC7812.GetADCStatus())) );
-  Udp.print( JSONPair("avref", AMC7812_AVREF) ); // analog voltage reference
-  Udp.print( JSONPair("gain", String(adc_gains)) );
+  //Udp.print( JSONPair("status", String(AMC7812.GetADCStatus())) );
+  //Udp.print( JSONPair("avref", AMC7812_AVREF) ); // analog voltage reference
+  //Udp.print( JSONPair("gain", String(adc_gains)) );
   if( conv_success == 0 ){
     Udp.print("readings:{");
     for(uint8_t i=0; i<AMC7812_ADC_CNT; i++){
@@ -79,14 +80,20 @@ void setup ()
   pinMode(trigpin, INPUT);
 
   int success;
+#ifdef DEBUG
   Serial.begin(9600);
+#endif
 
   // initialize ADC device
+#ifdef DEBUG
   Serial.print("\ninitializing AMC7812...");
+#endif
   uint8_t ret = AMC7812.begin();
   while ( ret ){
+#ifdef DEBUG
     Serial.print("Init of AMC7812 failed code: 0x");
     Serial.println(ret, HEX);
+#endif
     delay(1000);
     ret = AMC7812.begin();
   }
@@ -96,34 +103,44 @@ void setup ()
   //for( uint8_t i=8; i<=13; i++){
   //  AMC7812.EnableADC(i);
   //}
+#ifdef DEBUG
   Serial.println("AMC7812 device initialized");
 
   // initialize ethernet device
   Serial.println("Establishing ethernet connection");
+#endif
 
 #ifdef DHCP
   if (Ethernet.begin(mac) == 0) {
+#ifdef DEBUG
     Serial.println("Failed to configure Ethernet using DHCP");
+#endif
     // no point in carrying on, so do nothing forevermore:
     for(;;)
       ;
   }
 #else
+#ifdef DEBUG
   Serial.println("Configuring Ethernet using STATIC ip...");
+#endif
   Ethernet.begin(mac, ip); //Initialize Ethernet with static ip
 #endif
 
+#ifdef DEBUG
   Serial.print("My IP address: ");
   for (byte thisByte = 0; thisByte < 4; thisByte++) {
     // print the value of each byte of the IP address:
     Serial.print(Ethernet.localIP()[thisByte], DEC);
     Serial.print("."); 
   }
+#endif
 
   do{
     success = Udp.begin(LOCAL_PORT); //Initialize Udp
+#ifdef DEBUG
     Serial.print("\ninitialize: ");
     Serial.println(success ? "success" : "failed");
+#endif
     if(!success){
       delay(1500); //delay
     }
@@ -144,13 +161,17 @@ void loop(){
 
     // send start command to begin streaming
     if(datReq=="start"){
+#ifdef DEBUG
       Serial.println("beginning stream");
+#endif
       streaming = true;
     }
 
     // send stop command to stop streaming
     if(datReq=="stop"){
+#ifdef DEBUG
       Serial.println("halting stream");
+#endif
       streaming = false;
       Udp.stop();           // close connection
       Udp.begin(LOCAL_PORT); // wait for next connection
@@ -177,7 +198,7 @@ int main(void){
 
   for(;;){
     loop();
-    if (serialEventRun) serialEventRun();
+    //if (serialEventRun) serialEventRun();
   }
   return 0;
 }
