@@ -12,6 +12,7 @@ include_directories("${PROJECT_INCLUDE_DIR}")
 add_avr_executable(amc7812_test amc7812_test/amc7812_test.cpp)
 add_avr_executable(amc7812_stream amc7812_stream/amc7812_stream.cpp)
 add_avr_executable(amc7812_trig-daq amc7812_trig-daq/amc7812_trig-daq.cpp)
+add_avr_executable(amc7812_monitoringServer amc7812_monitoringServer/amc7812_monitoringServer.cpp)
 
 ### add the dependant libraries
 ### acm7812_test
@@ -25,3 +26,8 @@ avr_target_link_libraries(amc7812_stream UIPETHERNET)
 avr_target_link_libraries(amc7812_trig-daq AMC7812)
 avr_target_link_libraries(amc7812_trig-daq ARDUINO)
 avr_target_link_libraries(amc7812_trig-daq UIPETHERNET)
+### acm7812_monitoringServer
+avr_target_link_libraries(amc7812_monitoringServer AMC7812)
+avr_target_link_libraries(amc7812_monitoringServer ARDUINO)
+avr_target_link_libraries(amc7812_monitoringServer UIPETHERNET)
+avr_target_link_libraries(amc7812_monitoringServer ZMQ)
