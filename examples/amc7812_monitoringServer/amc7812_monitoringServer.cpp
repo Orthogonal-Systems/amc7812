@@ -29,17 +29,18 @@ REQ and PUSH ZeroMQ sockets are emulated
 
 uint8_t channels = AMC7812_ADC_CNT; //16
 //uint8_t dataEntrySize = 5; // 16 bits ~> 65,000 -> 5 digits
-uint8_t dataEntrySize = 4; // 12 bits ~> 4,000 -> 4 digits
+//uint8_t dataEntrySize = 4; // 12 bits ~> 4,000 -> 4 digits
+uint8_t dataEntrySize = 7; // for fp values
 
 // TODO: make macro for size of buffer
-char zmq_buffer[200]={0}; //!< buffer for zmq communication, needs to fit dataPacket
+char zmq_buffer[256]={0}; //!< buffer for zmq communication, needs to fit dataPacket
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
 
 // initialize the library instance:
 EthernetClient client;
 ZMQSocket ZMQPush(client, zmq_buffer, PUSH);
-DataPacket packet( channels, (char *)"amcTest", 7, dataEntrySize, zmq_buffer + ZMQ_MSG_OFFSET );
+DataPacket packet( channels, (char *)"amcFPTest", 9, dataEntrySize, zmq_buffer + ZMQ_MSG_OFFSET );
 
 // fill in an available IP address on your network here,
 // for manual configuration:
@@ -60,6 +61,21 @@ uint8_t trigpin = 13;
 
 // define my new class
 AMC7812Class AMC7812;
+// linear calibrations for channels
+float m[AMC7812_ADC_CNT] = {1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0 // NC
+  ,1.20886,1.26525  // X
+  ,1.09459,1.20886  // Y
+  ,0.156906,16.2056  // Z
+  ,1.0,1.0}; // NC
+float b[AMC7812_ADC_CNT] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0 // NC
+  ,0.0136734,0.0107174  // X
+  ,0.0035753,0.0136734  // Y
+  ,0.0031166,0.0934562  // Z
+  ,0.0,0.0};  // NC
+
+// channel linear conversions
+
+const
 
 void addReadings(){
   uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
@@ -76,11 +92,16 @@ void addReadings(){
 
   // TODO: convert to seconds, 
   //uint32_t secs = ts/1000;
-  //uint32_t msecs = ts%1000; convert to base 2 decimal
+  //uint32_t msecs = ts%1000; 
   //add function to make char string
-
+  
+  float voltages[channels];
+  for( uint8_t i=0; i<=channels; i++ ){
+    voltages[i] = (5.0*(float)readings[i]/(4096.0))*m[i] + b[i];
+  }
+  
   // TODO: do fp conversion here for readings
-  uint8_t len = packet.preparePacket( ts, (int16_t*)readings );
+  uint8_t len = packet.preparePacket( ts, voltages );
   Serial.write((uint8_t*)(zmq_buffer+ZMQ_MSG_OFFSET),len);
   Serial.println();
   ZMQPush.sendZMQMsg(len);
@@ -147,7 +168,7 @@ void setup() {
     if(!err){
       // register datastream with server
       Serial.println(F("Registering data stream..."));
-      len = packet.registerStream();
+      len = packet.registerFloatStream();
       ZMQReq.sendZMQMsg(len);
       len = ZMQReq.recv();
       if( len < 0 ){
@@ -172,7 +193,7 @@ void setup() {
   // setup push socket
   Serial.println(F("Setting up PUSH socket..."));
   if( ZMQPush.connect( server, mes_port ) ){
-    Serial.println(F("shit"));
+    Serial.println(F("oops"));
     client.stop(); // TODO: deal with this better
     for(;;)
       ;
@@ -180,7 +201,7 @@ void setup() {
   Serial.println(F("Starting"));
   Serial.println(F("Data"));
   Serial.println(F("Stream"));
-  delay(3000);
+  delay(1000);
 }
 
 void loop() {
