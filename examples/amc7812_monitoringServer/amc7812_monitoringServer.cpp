@@ -21,11 +21,12 @@ REQ and PUSH ZeroMQ sockets are emulated
 
 #include "amc7812.h"
 #include "amc7812conf.h"
+#include "amc7812err.h"
 
 #include "zmqduino.h"   // zmq interface
 #include "monitoringServer.h" // monitoringServer interface
 
-#define DHCP 1
+#define DHCP 0
 
 uint8_t channels = AMC7812_ADC_CNT; //16
 //uint8_t dataEntrySize = 5; // 16 bits ~> 65,000 -> 5 digits
@@ -45,10 +46,11 @@ DataPacket packet( channels, (char *)"amcFPTest", 9, dataEntrySize, zmq_buffer +
 // fill in an available IP address on your network here,
 // for manual configuration:
 //IPAddress ip    (192,168,1,183);
-IPAddress ip    (10,128,226,195);
+IPAddress ip    (169,254,5,10);
+//IPAddress ip    (10,128,226,195);
 //IPAddress server(192,168,1,213);
 //IPAddress server(128,104,160,150);
-IPAddress server(10,128,226,183);
+IPAddress server(169,254,5,183);
 int reg_port = 5556;
 int mes_port = 5557;
 
@@ -77,7 +79,7 @@ float b[AMC7812_ADC_CNT] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0 // NC
 
 const
 
-void addReadings(){
+uint8_t addReadings(){
   uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
   uint8_t spsr = SPSR;                            // save spi settings, before setting up for ADC
   SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
@@ -97,7 +99,7 @@ void addReadings(){
   
   float voltages[channels];
   for( uint8_t i=0; i<=channels; i++ ){
-    voltages[i] = (5.0*(float)readings[i]/(4096.0))*m[i] + b[i];
+    voltages[i] = conv_success ? 0 : (5.0*(float)readings[i]/(4096.0))*m[i] + b[i];
   }
   
   // TODO: do fp conversion here for readings
@@ -105,18 +107,14 @@ void addReadings(){
   Serial.write((uint8_t*)(zmq_buffer+ZMQ_MSG_OFFSET),len);
   Serial.println();
   ZMQPush.sendZMQMsg(len);
+  return conv_success;
 }
 
-void setup() {
-  // minimal SPI bus config (cant have two devices being addressed at once)
-  PORTG |= (1<<0);  // set AMC7812 CS pin high if connected
-  digitalWrite(SS, HIGH); // set ENCJ CS pin high 
-
-  // Set trig as input
-  //TrigDDR &= ~(1<<TrigPIN);
-  pinMode(trigpin, INPUT);
-
-  Serial.begin(115200); //Turn on Serial Port for debugging
+uint8_t setup_DAQ(){
+  uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
+  uint8_t spsr = SPSR;                            // save spi settings, before setting up for ADC
+  SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
+  SPSR = AMC7812.GetSPSR();                       // set SPI settings for ADC operations
 
   Serial.print(F("\ninitializing AMC7812..."));
   uint8_t ret = AMC7812.begin();
@@ -132,11 +130,28 @@ void setup() {
   //for( uint8_t i=8; i<=13; i++){
   //  AMC7812.EnableADC(i);
   //}
+  
+  SPCR = spcr;  // leave no trace
+  SPSR = spsr;  // leave no trace
+
   Serial.println(F("AMC7812 device initialized"));
+  return ret;
+}
+
+void setup() {
+  // minimal SPI bus config (cant have two devices being addressed at once)
+  PORTG |= (1<<0);  // set AMC7812 CS pin high if connected
+  digitalWrite(SS, HIGH); // set ENCJ CS pin high 
+
+  pinMode(trigpin, INPUT);
+
+  Serial.begin(115200); //Turn on Serial Port for debugging
+
+  uint8_t ret = setup_DAQ();
 
   // set up ethernet chip
   byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
-#if DHCP || UIP_UDP // cant use DHCP without using UDP
+#if DHCP && UIP_UDP // cant use DHCP without using UDP
   Serial.println(F("DHCP..."));
   if (Ethernet.begin(mac) == 0) {
     Serial.println(F("Failed DHCP"));
@@ -207,11 +222,13 @@ void setup() {
 void loop() {
   Ethernet.maintain();
 
-
   uint8_t newTrig = digitalRead(trigpin);
   // trig on high to low trigger
   if( lastTrig && !newTrig ){
-    addReadings();   //Send string back to client 
+    //Send string back to client 
+    if(addReadings() == AMC7812_TIMEOUT_ERR){
+      setup_DAQ();
+    }
   }
   lastTrig = newTrig;
 
