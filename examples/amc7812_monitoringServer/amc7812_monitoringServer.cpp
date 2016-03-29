@@ -18,6 +18,7 @@ REQ and PUSH ZeroMQ sockets are emulated
 #include <Arduino.h>
 #include <UIPEthernet.h>
 #include <UIPClient.h>
+#include <TimeLib.h>
 
 #include "amc7812.h"
 #include "amc7812conf.h"
@@ -34,25 +35,34 @@ uint8_t channels = AMC7812_ADC_CNT; //16
 uint8_t dataEntrySize = 7; // for fp values
 
 // TODO: make macro for size of buffer
-char zmq_buffer[256]={0}; //!< buffer for zmq communication, needs to fit dataPacket
+char zmq_buffer[269]={0}; //!< buffer for zmq communication, needs to fit dataPacket
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
 
 // initialize the library instance:
 EthernetClient client;
-ZMQSocket ZMQPush(client, zmq_buffer, PUSH);
-DataPacket packet( channels, (char *)"amcFPTest", 9, dataEntrySize, zmq_buffer + ZMQ_MSG_OFFSET );
-
-// fill in an available IP address on your network here,
-// for manual configuration:
-//IPAddress ip    (192,168,1,183);
+#if !DHCP
 IPAddress ip    (169,254,5,10);
-//IPAddress ip    (10,128,226,195);
-//IPAddress server(192,168,1,213);
-//IPAddress server(128,104,160,150);
-IPAddress server(169,254,5,183);
+#endif
+ZMQSocket ZMQPush(client, zmq_buffer, PUSH);
+uint8_t useFractionalSecs = 1;
+DataPacket packet( channels
+    , (char *)"ADC1" // stream name
+    , 4 // length of the stream name
+    , dataEntrySize // max length of decimal character string to use
+    , zmq_buffer + ZMQ_MSG_OFFSET // communication buffer after ZMQ header
+    , useFractionalSecs // send sub-second timestamp info
+);
+
+// address for registration and sending of data
+IPAddress data_server(169,254,5,183);
 int reg_port = 5556;
 int mes_port = 5557;
+
+EthernetUDP Udp;
+// address for ntp server sync
+IPAddress ntp_server(169,254,5,183);
+int ntp_port = 8888;  // local port to listen for UDP packets
 
 // mega pin 13
 uint8_t TrigDDR = DDRB;
@@ -75,27 +85,23 @@ float b[AMC7812_ADC_CNT] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0 // NC
   ,0.0031166,0.0934562  // Z
   ,0.0,0.0};  // NC
 
-// channel linear conversions
-
-const
+void sendNTPpacket(IPAddress &address);
+time_t getNtpTime();
 
 uint8_t addReadings(){
   uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
   uint8_t spsr = SPSR;                            // save spi settings, before setting up for ADC
   SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
   SPSR = AMC7812.GetSPSR();                       // set SPI settings for ADC operations
-  uint32_t ts = millis();                         // time start at start, ms
+  time_t ts = now(0);                             // timestamp at start (dont allow ntp sync), ms
   uint8_t conv_success = AMC7812.ReadADCs();      // perform conversion cycle on active ADCs
   uint16_t* readings = AMC7812.GetADCReadings();  // retrieve results of the read
-  //uint16_t adc_gains = AMC7812.GetADCGains();     // get ADC gains
-  //AMC7812.TriggerADCsExternal();
   SPCR = spcr;  // leave no trace
   SPSR = spsr;  // leave no trace
 
-  // TODO: convert to seconds, 
-  //uint32_t secs = ts/1000;
-  //uint32_t msecs = ts%1000; 
-  //add function to make char string
+  // separate 64b timestamp to 32b second and fractional second components
+  uint32_t ts_sec = toSecs(ts);
+  uint32_t ts_fsec = toFracSecs(ts);
   
   float voltages[channels];
   for( uint8_t i=0; i<=channels; i++ ){
@@ -103,7 +109,7 @@ uint8_t addReadings(){
   }
   
   // TODO: do fp conversion here for readings
-  uint8_t len = packet.preparePacket( ts, voltages );
+  uint8_t len = packet.preparePacket( ts_sec, ts_fsec, voltages );
   Serial.write((uint8_t*)(zmq_buffer+ZMQ_MSG_OFFSET),len);
   Serial.println();
   ZMQPush.sendZMQMsg(len);
@@ -138,17 +144,7 @@ uint8_t setup_DAQ(){
   return ret;
 }
 
-void setup() {
-  // minimal SPI bus config (cant have two devices being addressed at once)
-  PORTG |= (1<<0);  // set AMC7812 CS pin high if connected
-  digitalWrite(SS, HIGH); // set ENCJ CS pin high 
-
-  pinMode(trigpin, INPUT);
-
-  Serial.begin(115200); //Turn on Serial Port for debugging
-
-  uint8_t ret = setup_DAQ();
-
+void setup_ethernet(){
   // set up ethernet chip
   byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
 #if DHCP && UIP_UDP // cant use DHCP without using UDP
@@ -167,7 +163,16 @@ void setup() {
   Serial.println(Ethernet.subnetMask());
   Serial.println(Ethernet.gatewayIP());
   Serial.println(Ethernet.dnsServerIP());
+}
 
+void setup_ntp(){
+  // setup NTP sync service
+  Udp.begin(ntp_port);
+  Serial.println(F("Waiting for NTP sync"));
+  setSyncProvider(getNtpTime);
+}
+
+void register_stream(){
   // setup request socket
   Serial.println(F("Setting up REQ socket"));
   ZMQSocket ZMQReq( client, zmq_buffer, REQ );
@@ -175,7 +180,7 @@ void setup() {
   do{
     uint8_t err = 0;
     len = -1;
-    if( ZMQReq.connect( server, reg_port ) ){
+    if( ZMQReq.connect( data_server, reg_port ) ){
       client.stop(); // TODO: deal with this better
       Serial.println("Cant connect to server");
       err = 1;
@@ -202,12 +207,12 @@ void setup() {
   // disconnect from registering port
   Serial.println(F("Disconnecting REQ socket..."));
   client.stop();
-  
-  delay(1000); // increase stability
-  
+}
+
+void setup_data_stream(){
   // setup push socket
   Serial.println(F("Setting up PUSH socket..."));
-  if( ZMQPush.connect( server, mes_port ) ){
+  if( ZMQPush.connect( data_server, mes_port ) ){
     Serial.println(F("oops"));
     client.stop(); // TODO: deal with this better
     for(;;)
@@ -216,11 +221,29 @@ void setup() {
   Serial.println(F("Starting"));
   Serial.println(F("Data"));
   Serial.println(F("Stream"));
+}
+
+void setup() {
+  // minimal SPI bus config (cant have two devices being addressed at once)
+  //PORTG |= (1<<0);  // set AMC7812 CS pin high if connected
+  digitalWrite(AMC7812_CS_ARDUINO_PIN, HIGH); // set AMC CS pin high 
+  digitalWrite(SS, HIGH); // set ENCJ CS pin high 
+  pinMode(trigpin, INPUT);
+
+  Serial.begin(115200); //Turn on Serial Port for debugging
+
+  uint8_t ret = setup_DAQ();
+  setup_ethernet();
+  setup_ntp();
+  register_stream();
+  delay(1000); // increase stability
+  setup_data_stream();
   delay(1000);
 }
 
 void loop() {
   Ethernet.maintain();
+  now();  // see if its time to sync
 
   uint8_t newTrig = digitalRead(trigpin);
   // trig on high to low trigger
@@ -250,4 +273,61 @@ int main(void){
     if (serialEventRun) serialEventRun();
   }
   return 0;
+}
+
+/*-------- NTP code ----------*/
+  
+const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
+byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
+
+time_t getNtpTime()
+{
+  while (Udp.parsePacket() > 0) ; // discard any previously received packets
+  Serial.println("Transmit NTP Request");
+  sendNTPpacket(ntp_server);
+  uint32_t beginWait = millis();
+  while (millis() - beginWait < 100) {
+    int size = Udp.parsePacket();
+    if (size >= NTP_PACKET_SIZE) {
+      Serial.println("Receive NTP Response");
+      Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
+      unsigned long secsSince1900;
+      unsigned long fracSecs;
+      // convert four bytes starting at location 40 to a long integer
+      secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
+      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
+      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
+      secsSince1900 |= (unsigned long)packetBuffer[43];
+      fracSecs =  (unsigned long)packetBuffer[44] << 24;
+      fracSecs |= (unsigned long)packetBuffer[45] << 16;
+      fracSecs |= (unsigned long)packetBuffer[46] << 8;
+      fracSecs |= (unsigned long)packetBuffer[47];
+      return ((time_t)(secsSince1900 - 2208988800UL)<<32) + fracSecs;
+    }
+  }
+  Serial.println("No NTP Response :-(");
+  return 0; // return 0 if unable to get the time
+}
+
+// send an NTP request to the time server at the given address
+void sendNTPpacket(IPAddress &address)
+{
+  // set all bytes in the buffer to 0
+  memset(packetBuffer, 0, NTP_PACKET_SIZE);
+  // Initialize values needed to form NTP request
+  // (see URL above for details on the packets)
+  packetBuffer[0] = 0b11100011;   // LI, Version, Mode
+  packetBuffer[1] = 0;     // Stratum, or type of clock
+  packetBuffer[2] = 6;     // Polling Interval
+  packetBuffer[3] = 0xEC;  // Peer Clock Precision
+  // 8 bytes of zero for Root Delay & Root Dispersion
+  packetBuffer[12]  = 49;
+  packetBuffer[13]  = 0x4E;
+  packetBuffer[14]  = 49;
+  packetBuffer[15]  = 52;
+  // all NTP fields have been given values, now
+  // you can send a packet requesting a timestamp:                 
+  Udp.beginPacket(address, 123); //NTP requests are to port 123
+  Udp.write(packetBuffer, NTP_PACKET_SIZE);
+  Udp.endPacket();
 }
