@@ -29,7 +29,8 @@ REQ and PUSH ZeroMQ sockets are emulated
 
 #define DHCP 0
 
-uint8_t channels = AMC7812_ADC_CNT; //16
+//uint8_t channels = AMC7812_ADC_CNT; //16
+uint8_t channels = AMC7812_ADC_CNT-2; //14 (ran out of space in 256 bit buffer
 //uint8_t dataEntrySize = 5; // 16 bits ~> 65,000 -> 5 digits
 //uint8_t dataEntrySize = 4; // 12 bits ~> 4,000 -> 4 digits
 uint8_t dataEntrySize = 7; // for fp values
@@ -84,6 +85,8 @@ float b[AMC7812_ADC_CNT] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0 // NC
   ,0.0035753,0.0136734  // Y
   ,0.0031166,0.0934562  // Z
   ,0.0,0.0};  // NC
+
+uint8_t longerSyncPeriod = 0; // state tracker
 
 void sendNTPpacket(IPAddress &address);
 time_t getNtpTime();
@@ -169,6 +172,7 @@ void setup_ntp(){
   // setup NTP sync service
   Udp.begin(ntp_port);
   Serial.println(F("Waiting for NTP sync"));
+  setSyncInterval(600); // initial one 10 minutes to take care of most of the drift
   setSyncProvider(getNtpTime);
 }
 
@@ -223,6 +227,7 @@ void setup_data_stream(){
   Serial.println(F("Stream"));
 }
 
+
 void setup() {
   // minimal SPI bus config (cant have two devices being addressed at once)
   //PORTG |= (1<<0);  // set AMC7812 CS pin high if connected
@@ -243,7 +248,15 @@ void setup() {
 
 void loop() {
   Ethernet.maintain();
+
   now();  // see if its time to sync
+  // if we havent extended the time period yet,
+  // and if there is a non-zero drift correction
+  // then make the period longer
+  if( (!longerSyncPeriod) & getDriftCorrection() ){
+    setSyncInterval(72000);  // every 2 hours
+    longerSyncPeriod=1;
+  }
 
   uint8_t newTrig = digitalRead(trigpin);
   // trig on high to low trigger
@@ -286,7 +299,7 @@ time_t getNtpTime()
   Serial.println("Transmit NTP Request");
   sendNTPpacket(ntp_server);
   uint32_t beginWait = millis();
-  while (millis() - beginWait < 100) {
+  while (millis() - beginWait < 1000) {
     int size = Udp.parsePacket();
     if (size >= NTP_PACKET_SIZE) {
       Serial.println("Receive NTP Response");
