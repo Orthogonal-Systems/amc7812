@@ -38,13 +38,15 @@
 // AMC7812 control 
 
 // REQUIRED: actual chip select pin, change here
-#define AMC7812_CS_PORT   PORTG
-#define AMC7812_CS_DDR    DDRG
-#define AMC7812_CS_PIN    0     // mega pin 41
+#define AMC7812_CS_PORT   PORTL
+#define AMC7812_CS_DDR    DDRL
+#define AMC7812_CS_PIN    0     // mega pin 49
+#define AMC7812_CS_ARDUINO_PIN 49
 // REQUIRED:reset pin
 #define AMC7812_RST_PORT  PORTL
 #define AMC7812_RST_DDR   DDRL
 #define AMC7812_RST_PIN   1    // mega pin 48
+#define AMC7812_RST_ARDUINO_PIN 48
 
 // OPTIONAL: data available flag (comment out if not connected)
 #define AMC7812_DAV_PORT  PORTL
@@ -72,5 +74,26 @@
 #define AMC7812_DAC_CLR_1_PORT PORTL
 #define AMC7812_DAC_CLR_1_DDR  DDRL
 #define AMC7812_DAC_CLR_1_PIN  5    // mega pin 44
+
+// FRONT PANEL DIO AND LEDS
+#define AMC7812_IDLE_LED_ARDUINO 13
+#define AMC7812_COMM_LED_ARDUINO 12
+#define AMC7812_SCL_LED_ARDUINO 21
+#define AMC7812_SDA_LED_ARDUINO 20
+
+#define AMC7812_MCU_STAT_LED_ADDR 5
+#define AMC7812_AMC_STAT_LED_ADDR 4
+#define AMC7812_USER1_LED_ADDR 6
+#define AMC7812_USER2_LED_ADDR 7
+#define AMC7812_ERR1_LED_ADDR 3
+#define AMC7812_ERR2_LED_ADDR 2
+#define AMC7812_ERR3_LED_ADDR 1
+#define AMC7812_ERR4_LED_ADDR 0
+
+// FRONT PANEL DIO
+#define AMC7812_DIO0_ARDUINO 8
+#define AMC7812_DIO1_ARDUINO 9
+#define AMC7812_DIO2_ARDUINO 10
+#define AMC7812_DIO3_ARDUINO 11
 
 #endif

@@ -96,7 +96,7 @@ void setup ()
 void loop(){
   delay(5000);
 
-  uint8_t dac_chs[] = { 0, 2 };
+  uint8_t dac_chs[] = { 0, 3 };
   int16_t dac_vals[] = {0x0FFF, 0x07FF};
 
   Serial.print(seperator);
@@ -151,14 +151,9 @@ void loop(){
   for( uint16_t i = 0; i < READ_BLOCK_SIZE; i++ ){
     Serial.println(adc_vals2[i]);
   }
-<<<<<<< HEAD
   
   AMC7812.EnableADCs();
   AMC7812.TriggerADCsExternal();
-=======
-
-  AMC7812.EnableADCs();
->>>>>>> cf0001054aebbac2ce2db346108d5c737bab9866
 }
 
 // normal arduino main function
