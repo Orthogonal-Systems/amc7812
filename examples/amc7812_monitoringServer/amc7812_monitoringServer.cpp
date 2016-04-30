@@ -29,21 +29,21 @@ REQ and PUSH ZeroMQ sockets are emulated
 
 #define DHCP 0
 
-uint8_t channels = AMC7812_ADC_CNT; //16
+uint8_t channels = 14; //AMC7812_ADC_CNT; //16
 //uint8_t dataEntrySize = 5; // 16 bits ~> 65,000 -> 5 digits
 //uint8_t dataEntrySize = 4; // 12 bits ~> 4,000 -> 4 digits
 uint8_t dataEntrySize = 7; // for fp values
 
 // TODO: make macro for size of buffer
-char zmq_buffer[269]={0}; //!< buffer for zmq communication, needs to fit dataPacket
+char zmq_buffer[256]={0}; //!< buffer for zmq communication, needs to fit dataPacket
 
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEF};
 
 // initialize the library instance:
 EthernetClient client;
 #if !DHCP
 //IPAddress ip    (169,254,5,10);
-IPAddress ip    (169,254,5,11);
+IPAddress ip    (169,254,5,12);
 #endif
 ZMQSocket ZMQPush(client, zmq_buffer, PUSH);
 uint8_t useFractionalSecs = 1;
@@ -253,11 +253,11 @@ void loop() {
   digitalWrite(AMC7812_COMM_LED_ARDUINO, HIGH);
   Ethernet.maintain();
   now();  // see if its time to sync
-  if( !client.connected() ){
-    Serial.println(F("Client disconnected, attempting reconnect..."));
-    client.stop();
-    setup_data_stream();
-  }
+//  if( !client.connected() ){
+//    Serial.println(F("Client disconnected, attempting reconnect..."));
+//    client.stop();
+//    setup_data_stream();
+//  }
   digitalWrite(AMC7812_COMM_LED_ARDUINO, LOW);
 
   uint8_t newTrig = digitalRead(trigpin);
@@ -306,7 +306,7 @@ time_t getNtpTime()
   Serial.println("Transmit NTP Request");
   sendNTPpacket(ntp_server);
   uint32_t beginWait = millis();
-  while (millis() - beginWait < 100) {
+  while (millis() - beginWait < 1000) {
     int size = Udp.parsePacket();
     if (size >= NTP_PACKET_SIZE) {
       Serial.println("Receive NTP Response");
