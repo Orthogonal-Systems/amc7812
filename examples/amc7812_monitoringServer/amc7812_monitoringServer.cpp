@@ -78,7 +78,7 @@ AMC7812Class AMC7812;
 float m[AMC7812_ADC_CNT] = {1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0 // NC
   ,1.20886,1.26525  // X
   ,1.09459,1.20886  // Y
-  ,0.156906,16.2056  // Z
+  ,0.156906,1.00662 // Z
   ,1.0,1.0}; // NC
 float b[AMC7812_ADC_CNT] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0 // NC
   ,0.0136734,0.0107174  // X
@@ -107,7 +107,11 @@ uint8_t addReadings(){
   uint32_t ts_fsec = toFracSecs(ts);
   
   float voltages[channels];
-  for( uint8_t i=0; i<=channels; i++ ){
+  uint8_t allZeros = 0;
+  for( uint8_t i=0; i<channels; i++ ){
+    if( readings[i] == 0 ){
+      allZeros++;
+    }
     voltages[i] = conv_success ? 0 : (5.0*(float)readings[i]/(4096.0))*m[i] + b[i];
   }
   
@@ -116,6 +120,9 @@ uint8_t addReadings(){
   Serial.write((uint8_t*)(zmq_buffer+ZMQ_MSG_OFFSET),len);
   Serial.println();
   ZMQPush.sendZMQMsg(len);
+  if (allZeros){
+    return AMC7812_TIMEOUT_ERR;
+  }
   return conv_success;
 }
 

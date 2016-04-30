@@ -151,14 +151,12 @@ void loop(){
   for( uint16_t i = 0; i < READ_BLOCK_SIZE; i++ ){
     Serial.println(adc_vals2[i]);
   }
-<<<<<<< HEAD
   
-  AMC7812.EnableADCs();
-  AMC7812.TriggerADCsExternal();
-=======
+//  AMC7812.EnableADCs();
+//  AMC7812.TriggerADCsExternal();
 
   AMC7812.EnableADCs();
->>>>>>> cf0001054aebbac2ce2db346108d5c737bab9866
+  AMC7812.TriggerADCsInternal();
 }
 
 // normal arduino main function
