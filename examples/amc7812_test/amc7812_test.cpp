@@ -96,7 +96,7 @@ void setup ()
 void loop(){
   delay(5000);
 
-  uint8_t dac_chs[] = { 0, 2 };
+  uint8_t dac_chs[] = { 0, 3 };
   int16_t dac_vals[] = {0x0FFF, 0x07FF};
 
   Serial.print(seperator);

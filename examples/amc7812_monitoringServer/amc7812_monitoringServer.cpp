@@ -30,25 +30,26 @@ REQ and PUSH ZeroMQ sockets are emulated
 #define DHCP 0
 
 //uint8_t channels = AMC7812_ADC_CNT; //16
-uint8_t channels = AMC7812_ADC_CNT-2; //14 (ran out of space in 256 bit buffer
+uint8_t channels = AMC7812_ADC_CNT-2; //14 (ran out of space in 256 bit buffer, need to compress data or switch back to integers)
 //uint8_t dataEntrySize = 5; // 16 bits ~> 65,000 -> 5 digits
 //uint8_t dataEntrySize = 4; // 12 bits ~> 4,000 -> 4 digits
 uint8_t dataEntrySize = 7; // for fp values
 
 // TODO: make macro for size of buffer
-char zmq_buffer[269]={0}; //!< buffer for zmq communication, needs to fit dataPacket
+char zmq_buffer[256]={0}; //!< buffer for zmq communication, needs to fit dataPacket
 
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEF};
 
 // initialize the library instance:
 EthernetClient client;
 #if !DHCP
-IPAddress ip    (169,254,5,10);
+//IPAddress ip    (169,254,5,10);
+IPAddress ip    (169,254,5,12);
 #endif
 ZMQSocket ZMQPush(client, zmq_buffer, PUSH);
 uint8_t useFractionalSecs = 1;
 DataPacket packet( channels
-    , (char *)"ADC1" // stream name
+    , (char *)"ADC2" // stream name
     , 4 // length of the stream name
     , dataEntrySize // max length of decimal character string to use
     , zmq_buffer + ZMQ_MSG_OFFSET // communication buffer after ZMQ header
@@ -66,11 +67,8 @@ IPAddress ntp_server(169,254,5,183);
 int ntp_port = 8888;  // local port to listen for UDP packets
 
 // mega pin 13
-uint8_t TrigDDR = DDRB;
-uint8_t TrigPORT = PORTB;
-uint8_t TrigPIN = 7;
-uint8_t lastTrig = 0;
-uint8_t trigpin = 13;
+uint8_t lastTrig = 1;
+uint8_t trigpin = AMC7812_DIO0_ARDUINO;
 
 // define my new class
 AMC7812Class AMC7812;
@@ -115,7 +113,7 @@ uint8_t addReadings(){
     voltages[i] = conv_success ? 0 : (5.0*(float)readings[i]/(4096.0))*m[i] + b[i];
   }
   
-  // TODO: do fp conversion here for readings
+  digitalWrite(AMC7812_COMM_LED_ARDUINO, HIGH);
   uint8_t len = packet.preparePacket( ts_sec, ts_fsec, voltages );
   Serial.write((uint8_t*)(zmq_buffer+ZMQ_MSG_OFFSET),len);
   Serial.println();
@@ -123,6 +121,7 @@ uint8_t addReadings(){
   if (allZeros){
     return AMC7812_TIMEOUT_ERR;
   }
+  digitalWrite(AMC7812_COMM_LED_ARDUINO, LOW);
   return conv_success;
 }
 
@@ -131,6 +130,9 @@ uint8_t setup_DAQ(){
   uint8_t spsr = SPSR;                            // save spi settings, before setting up for ADC
   SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
   SPSR = AMC7812.GetSPSR();                       // set SPI settings for ADC operations
+
+  digitalWrite(AMC7812_IDLE_LED_ARDUINO, LOW);
+  digitalWrite(AMC7812_COMM_LED_ARDUINO, LOW);
 
   Serial.print(F("\ninitializing AMC7812..."));
   uint8_t ret = AMC7812.begin();
@@ -245,18 +247,32 @@ void setup() {
   Serial.begin(115200); //Turn on Serial Port for debugging
 
   uint8_t ret = setup_DAQ();
+  digitalWrite(AMC7812_COMM_LED_ARDUINO, HIGH);
   setup_ethernet();
   setup_ntp();
   register_stream();
+  digitalWrite(AMC7812_COMM_LED_ARDUINO, LOW);
+
   delay(1000); // increase stability
+  digitalWrite(AMC7812_COMM_LED_ARDUINO, HIGH);
   setup_data_stream();
+  digitalWrite(AMC7812_COMM_LED_ARDUINO, LOW);
   delay(1000);
 }
 
 void loop() {
+  digitalWrite(AMC7812_IDLE_LED_ARDUINO, HIGH);
+  digitalWrite(AMC7812_COMM_LED_ARDUINO, HIGH);
   Ethernet.maintain();
 
   now();  // see if its time to sync
+//  if( !client.connected() ){
+//    Serial.println(F("Client disconnected, attempting reconnect..."));
+//    client.stop();
+//    setup_data_stream();
+//  }
+  digitalWrite(AMC7812_COMM_LED_ARDUINO, LOW);
+
   // if we havent extended the time period yet,
   // and if there is a non-zero drift correction
   // then make the period longer
@@ -266,8 +282,11 @@ void loop() {
   }
 
   uint8_t newTrig = digitalRead(trigpin);
+  // trig on low to high trigger
+  //if( lastTrig && !newTrig ){
   // trig on high to low trigger
-  if( lastTrig && !newTrig ){
+  if( !lastTrig && newTrig ){
+    digitalWrite(AMC7812_IDLE_LED_ARDUINO, LOW);
     //Send string back to client 
     if(addReadings() == AMC7812_TIMEOUT_ERR){
       setup_DAQ();
@@ -278,7 +297,9 @@ void loop() {
   // check for incoming packet, do stuff if we need to
   uint8_t len = client.available();
   if( len ){
+    digitalWrite(AMC7812_COMM_LED_ARDUINO, HIGH);
     len = ZMQPush.read(); // process header and get get actual mesg length
+    digitalWrite(AMC7812_COMM_LED_ARDUINO, LOW);
   }
 }
 
