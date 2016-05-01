@@ -13,22 +13,27 @@ add_avr_executable(amc7812_test amc7812_test/amc7812_test.cpp)
 add_avr_executable(amc7812_stream amc7812_stream/amc7812_stream.cpp)
 add_avr_executable(amc7812_trig-daq amc7812_trig-daq/amc7812_trig-daq.cpp)
 add_avr_executable(amc7812_monitoringServer amc7812_monitoringServer/amc7812_monitoringServer.cpp)
+add_avr_executable(frontpanel_test frontpanel_test/frontpanel_test.cpp)
 
 ### add the dependant libraries
-### acm7812_test
+### amc7812_test
 avr_target_link_libraries(amc7812_test AMC7812)
 avr_target_link_libraries(amc7812_test ARDUINO)
-### acm7812_stream
+### amc7812_stream
 avr_target_link_libraries(amc7812_stream AMC7812)
 avr_target_link_libraries(amc7812_stream ARDUINO)
 avr_target_link_libraries(amc7812_stream UIPETHERNET)
-### acm7812_trig-daq
+### amc7812_trig-daq
 avr_target_link_libraries(amc7812_trig-daq AMC7812)
 avr_target_link_libraries(amc7812_trig-daq ARDUINO)
 avr_target_link_libraries(amc7812_trig-daq UIPETHERNET)
-### acm7812_monitoringServer
+### amc7812_monitoringServer
 avr_target_link_libraries(amc7812_monitoringServer AMC7812)
 avr_target_link_libraries(amc7812_monitoringServer ARDUINO)
 avr_target_link_libraries(amc7812_monitoringServer UIPETHERNET)
 avr_target_link_libraries(amc7812_monitoringServer ZMQ)
 avr_target_link_libraries(amc7812_monitoringServer TIME)
+### frontpanel_test
+avr_target_link_libraries(frontpanel_test AMC7812)
+avr_target_link_libraries(frontpanel_test ARDUINO)
+avr_target_link_libraries(frontpanel_test WIRE)
