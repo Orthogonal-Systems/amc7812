@@ -32,27 +32,27 @@ REQ and PUSH ZeroMQ sockets are emulated
 #define DHCP 0
 #define DEBUG
 
-//uint8_t channels = AMC7812_ADC_CNT; //16
-uint8_t channels = AMC7812_ADC_CNT-2; //14 (ran out of space in 256 bit buffer, need to compress data or switch back to integers)
+uint8_t channels = AMC7812_ADC_CNT; //16
+//uint8_t channels = AMC7812_ADC_CNT-2; //14 (ran out of space in 256 bit buffer, need to compress data or switch back to integers)
 //uint8_t dataEntrySize = 5; // 16 bits ~> 65,000 -> 5 digits
-//uint8_t dataEntrySize = 4; // 12 bits ~> 4,000 -> 4 digits
-uint8_t dataEntrySize = 7; // for fp values
+uint8_t dataEntrySize = 4; // 12 bits ~> 4,000 -> 4 digits
+//uint8_t dataEntrySize = 7; // for fp values
 
 // TODO: make macro for size of buffer
 char zmq_buffer[256]={0}; //!< buffer for zmq communication, needs to fit dataPacket
 
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEF};
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xE1};
 
 // initialize the library instance:
 EthernetClient client;
 #if !DHCP
 //IPAddress ip    (169,254,5,10);
-IPAddress ip    (169,254,5,12);
+IPAddress ip    (169,254,5,13);
 #endif
 ZMQSocket ZMQPush(client, zmq_buffer, PUSH);
 uint8_t useFractionalSecs = 1;
 DataPacket packet( channels
-    , (char *)"ADC2" // stream name
+    , (char *)"ADC1" // stream name
     , 4 // length of the stream name
     , dataEntrySize // max length of decimal character string to use
     , zmq_buffer + ZMQ_MSG_OFFSET // communication buffer after ZMQ header
@@ -71,21 +71,13 @@ int ntp_port = 8888;  // local port to listen for UDP packets
 
 // mega pin 13
 uint8_t lastTrig = 1;
-uint8_t trigpin = AMC7812_DIO0_ARDUINO;
+//uint8_t trigpin = AMC7812_DIO0_ARDUINO;
 
 // define my new class
 AMC7812Class AMC7812;
-// linear calibrations for channels
-float m[AMC7812_ADC_CNT] = {1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0 // NC
-  ,1.20886,1.26525  // X
-  ,1.09459,1.20886  // Y
-  ,0.156906,1.00662 // Z
-  ,1.0,1.0}; // NC
-float b[AMC7812_ADC_CNT] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0 // NC
-  ,0.0136734,0.0107174  // X
-  ,0.0035753,0.0136734  // Y
-  ,0.0031166,0.0934562  // Z
-  ,0.0,0.0};  // NC
+
+uint16_t dac_setpoints[AMC7812_DAC_CNT] = {0};
+
 
 uint8_t longerSyncPeriod = 0; // state tracker
 
@@ -93,31 +85,39 @@ void sendNTPpacket(IPAddress &address);
 time_t getNtpTime();
 
 uint8_t addReadings(){
+  uint16_t readings[AMC7812_ADC_CNT] = {0};
+  uint8_t conv_success;
   uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
   uint8_t spsr = SPSR;                            // save spi settings, before setting up for ADC
   SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
   SPSR = AMC7812.GetSPSR();                       // set SPI settings for ADC operations
   time_t ts = now(0);                             // timestamp at start (dont allow ntp sync), ms
-  uint8_t conv_success = AMC7812.ReadADCs();      // perform conversion cycle on active ADCs
-  uint16_t* readings = AMC7812.GetADCReadings();  // retrieve results of the read
+  for( uint8_t i=0; i<1; i++){
+    conv_success = AMC7812.ReadADCs();      // perform conversion cycle on active ADCs
+    uint16_t* temp = AMC7812.GetADCReadings();  // retrieve results of the read
+    for( uint8_t j=0; j<channels; j++ ){
+      readings[j] += temp[j];
+    }
+  }
   SPCR = spcr;  // leave no trace
   SPSR = spsr;  // leave no trace
 
   // separate 64b timestamp to 32b second and fractional second components
   uint32_t ts_sec = toSecs(ts);
   uint32_t ts_fsec = toFracSecs(ts);
-  float voltages[channels];
   uint8_t allZeros = 1;
 
   for( uint8_t i=0; i<channels; i++ ){
     if( readings[i] != 0 ){
       allZeros=0;
     }
-    voltages[i] = conv_success ? 0 : (5.0*(float)readings[i]/(4096.0))*m[i] + b[i];
+    // TODO: internal gain conversion 5V -> 2x, 2.5V -> 1x
+    //readings[i] = readings[i] >> 3; // div by 8
+    readings[i] = readings[i] >> 0; // div by 1
   }
   
   frontpanel_set_led( COMM_LED, 1 );
-  uint8_t len = packet.preparePacket( ts_sec, ts_fsec, voltages );
+  uint8_t len = packet.preparePacket( ts_sec, ts_fsec, (int16_t*)readings );
   frontpanel_set_led( ERR3_LED, 1 );  // leave on so I can tell if the error occured
   ZMQPush.sendZMQMsg(len);
   frontpanel_set_led( ERR3_LED, 0 );  // leave on so I can tell if the error occured
@@ -153,12 +153,23 @@ uint8_t setup_DAQ(){
     ret = AMC7812.begin();
   }
   frontpanel_set_led( ERR4_LED, 0 );
+  // set conversion rate to 250 ksps (improves averaging)
+  //AMC7812.SetConversionRate(0);
   // enter triggered mode
   AMC7812.SetTriggeredMode();
   //AMC7812.DisableADCs();
   //for( uint8_t i=8; i<=13; i++){
   //  AMC7812.EnableADC(i);
   //}
+
+  dac_setpoints[0] = 2458; // 3.000V
+  dac_setpoints[1] = 1802; // 2.200V
+  dac_setpoints[2] = 2458; // 3.000V
+  dac_setpoints[3] = 2294; // 2.800V
+
+  for( uint8_t i=0; i<AMC7812_DAC_CNT; i++ ){
+    AMC7812.WriteDAC( i, dac_setpoints[i] );
+  }
   
   SPCR = spcr;  // leave no trace
   SPSR = spsr;  // leave no trace
@@ -213,7 +224,7 @@ void register_stream(){
     if(!err){
       // register datastream with server
       Serial.println(F("Registering data stream..."));
-      len = packet.registerFloatStream();
+      len = packet.registerIntStream();
       ZMQReq.sendZMQMsg(len);
       len = ZMQReq.recv();
       if( len < 0 ){
@@ -276,6 +287,8 @@ void setup() {
   delay(1000);
 }
 
+uint32_t nextTrig = 0;
+
 void loop() {
   frontpanel_set_led( IDLE_LED, 1 );
   frontpanel_set_led( COMM_LED, 1 );
@@ -297,12 +310,16 @@ void loop() {
     setSyncInterval(72000);  // every 2 hours
     longerSyncPeriod=1;
   }
-
-  uint8_t newTrig = digitalRead(trigpin); // TODO: replace with frontpanel function
+  
+  uint8_t newTrig = 1;
+  //if( millis() > nextTrig ){
+  //  newTrig = 0;
+  //  nextTrig = millis() + 200;
+  //}
+  //uint8_t newTrig = digitalRead(trigpin); // TODO: replace with frontpanel function
   //if( lastTrig && !newTrig ){  // trig on low to high trigger
   if( !lastTrig && newTrig ){  // trig on high to low trigger
-    Serial.println("trigger detected");
-    frontpanel_set_led( IDLE_LED, 1 );
+    frontpanel_set_led( IDLE_LED, 0 );
     //Send string back to client 
     if(addReadings() == AMC7812_TIMEOUT_ERR){
       frontpanel_set_led( ERR1_LED, 1 );

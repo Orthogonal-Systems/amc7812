@@ -95,6 +95,7 @@ uint8_t AMC7812Class::begin(){
   AMC7812_CS_DDR  |= (1<<AMC7812_CS_PIN);   // then set as output
 //#if ( (AMC7812_CS_PORT != AMC7812_SS_PORT) & (AMC7812_CS_PIN != AMC7812_SPI_SS) )
   // SS _HAS_ to be an output, else chip will enter slave mode on low input
+  AMC7812_SPI_PORT |= (1<<AMC7812_HWCS_PIN); // turn pin high first
   AMC7812_SPI_PORT |= (1<<AMC7812_HWCS_PIN);
 //#endif
   // set up SCLK, MOSI, MISO, and SS as outputs, and enambles SPI as master
@@ -135,7 +136,8 @@ uint8_t AMC7812Class::begin(){
   Read( AMC7812_DEV_ID );
   // dummy read to get the answer
   uint16_t response = Read( 0x00 );
-  if( response != 0x1220 ){
+  if( (response != 0x1220) && (response != 0x1221) ){
+  //if( (response != 0x1221) ){
     return AMC7812_DEV_ID_ERR;
   }
 
