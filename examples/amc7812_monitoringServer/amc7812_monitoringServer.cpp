@@ -24,109 +24,102 @@ REQ and PUSH ZeroMQ sockets are emulated
 #include "amc7812conf.h"
 #include "amc7812err.h"
 
-#include "zmqduino.h"   // zmq interface
-#include "monitoringServer.h" // monitoringServer interface
+#include "origin.h"   // data server interface
+#include "datapacket.h"
 
 #include "frontpanel.h" // frontpanel led drivers
 
 #define DHCP 0
-#define DEBUG
+//#define DEBUG
 
-//uint8_t channels = AMC7812_ADC_CNT; //16
-uint8_t channels = AMC7812_ADC_CNT-2; //14 (ran out of space in 256 bit buffer, need to compress data or switch back to integers)
-//uint8_t dataEntrySize = 5; // 16 bits ~> 65,000 -> 5 digits
-//uint8_t dataEntrySize = 4; // 12 bits ~> 4,000 -> 4 digits
-uint8_t dataEntrySize = 7; // for fp values
+// DATA COLLECTION CONFIG //////////////////////////////////////////////////////
+AMC7812Class AMC7812;
+uint8_t channels = AMC7812_ADC_CNT;
+uint8_t lastTrig = 1;
+uint32_t nextTrig = 0;
+//uint8_t trigpin = AMC7812_DIO0_ARDUINO;
+const unsigned long postingInterval = 100;  //delay between updates (in milliseconds)
+////////////////////////////////////////////////////////////////////////////////
 
-// TODO: make macro for size of buffer
-char zmq_buffer[256]={0}; //!< buffer for zmq communication, needs to fit dataPacket
-
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEF};
-
-// initialize the library instance:
+// GENERIC ETHERNET INTERFACE CONFIG ///////////////////////////////////////////
 EthernetClient client;
-#if !DHCP
-//IPAddress ip    (169,254,5,10);
-IPAddress ip    (169,254,5,12);
-#endif
-ZMQSocket ZMQPush(client, zmq_buffer, PUSH);
-uint8_t useFractionalSecs = 1;
-DataPacket packet( channels
-    , (char *)"ADC2" // stream name
-    , 4 // length of the stream name
-    , dataEntrySize // max length of decimal character string to use
-    , zmq_buffer + ZMQ_MSG_OFFSET // communication buffer after ZMQ header
-    , useFractionalSecs // send sub-second timestamp info
-);
+IPAddress ip    (192,168,0,101);
+char buffer[256]={0};
+////////////////////////////////////////////////////////////////////////////////
 
-// address for registration and sending of data
-IPAddress data_server(169,254,5,183);
+// ORIGIN DATA SERVER INTERFACE CONFIG /////////////////////////////////////////
+// fill in an available IP address on your network here,
+// for manual configuration:
+IPAddress data_server(128,104,160,152);
 int reg_port = 5556;
 int mes_port = 5557;
 
+// origin data server interface
+Origin origin( client
+    , data_server
+    , reg_port
+    , mes_port
+    , (char *)"RBMAG"   // stream name
+    , 5         // stream name length (max 10)
+    , 1         // use fractional seconds
+    , channels  // maximum channels
+    , channels  // channels used
+    , (char *)DTYPE_UINT16
+    , INT16_TYPE_SIZE
+    , buffer
+);
+////////////////////////////////////////////////////////////////////////////////
+
+// NTP SERVER CONFIG ///////////////////////////////////////////////////////////
 EthernetUDP Udp;
 // address for ntp server sync
-IPAddress ntp_server(169,254,5,183);
+IPAddress ntp_server(128,104,160,150);
 int ntp_port = 8888;  // local port to listen for UDP packets
-
-// mega pin 13
-uint8_t lastTrig = 1;
-uint8_t trigpin = AMC7812_DIO0_ARDUINO;
-
-// define my new class
-AMC7812Class AMC7812;
-// linear calibrations for channels
-float m[AMC7812_ADC_CNT] = {1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0 // NC
-  ,1.20886,1.26525  // X
-  ,1.09459,1.20886  // Y
-  ,0.156906,1.00662 // Z
-  ,1.0,1.0}; // NC
-float b[AMC7812_ADC_CNT] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0 // NC
-  ,0.0136734,0.0107174  // X
-  ,0.0035753,0.0136734  // Y
-  ,0.0031166,0.0934562  // Z
-  ,0.0,0.0};  // NC
-
-uint8_t longerSyncPeriod = 0; // state tracker
-
 void sendNTPpacket(IPAddress &address);
 time_t getNtpTime();
+uint8_t longerSyncPeriod = 0; // state tracker
+const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
+byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
+////////////////////////////////////////////////////////////////////////////////
 
 uint8_t addReadings(){
+  uint16_t readings[AMC7812_ADC_CNT] = {0};
+  uint8_t conv_success;
   uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
   uint8_t spsr = SPSR;                            // save spi settings, before setting up for ADC
   SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
   SPSR = AMC7812.GetSPSR();                       // set SPI settings for ADC operations
   time_t ts = now(0);                             // timestamp at start (dont allow ntp sync), ms
-  uint8_t conv_success = AMC7812.ReadADCs();      // perform conversion cycle on active ADCs
-  uint16_t* readings = AMC7812.GetADCReadings();  // retrieve results of the read
+  for( uint8_t i=0; i<1; i++){
+    conv_success = AMC7812.ReadADCs();            // perform conversion cycle on active ADCs
+    uint16_t* temp = AMC7812.GetADCReadings();    // retrieve results of the read
+    for( uint8_t j=0; j<channels; j++ ){
+      readings[j] += temp[j];
+    }
+  }
   SPCR = spcr;  // leave no trace
   SPSR = spsr;  // leave no trace
 
   // separate 64b timestamp to 32b second and fractional second components
   uint32_t ts_sec = toSecs(ts);
   uint32_t ts_fsec = toFracSecs(ts);
-  float voltages[channels];
   uint8_t allZeros = 1;
 
   for( uint8_t i=0; i<channels; i++ ){
     if( readings[i] != 0 ){
       allZeros=0;
     }
-    voltages[i] = conv_success ? 0 : (5.0*(float)readings[i]/(4096.0))*m[i] + b[i];
+    readings[i] = readings[i] >> 0;
   }
   
   frontpanel_set_led( COMM_LED, 1 );
-  uint8_t len = packet.preparePacket( ts_sec, ts_fsec, voltages );
   frontpanel_set_led( ERR3_LED, 1 );  // leave on so I can tell if the error occured
-  ZMQPush.sendZMQMsg(len);
+  origin.sendPacket( ts_sec, ts_fsec, (int16_t*)readings );
   frontpanel_set_led( ERR3_LED, 0 );  // leave on so I can tell if the error occured
   if (allZeros){
-    frontpanel_set_led( ERR3_LED, 1 );  // leave on so I can tell if the error occured
+    frontpanel_set_led( ERR4_LED, 1 );  // leave on so I can tell if the error occured
     return AMC7812_TIMEOUT_ERR;
   }
-  //Serial.write((uint8_t*)(zmq_buffer+ZMQ_MSG_OFFSET),len);
-  //Serial.println();
   frontpanel_set_led( COMM_LED, 0 );
   return conv_success;
 }
@@ -170,7 +163,7 @@ uint8_t setup_DAQ(){
 
 void setup_ethernet(){
   // set up ethernet chip
-  byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
+  byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0x01};
 #if DHCP && UIP_UDP // cant use DHCP without using UDP
   Serial.println(F("DHCP..."));
   if (Ethernet.begin(mac) == 0) {
@@ -199,52 +192,23 @@ void setup_ntp(){
 
 void register_stream(){
   // setup request socket
-  Serial.println(F("Setting up REQ socket"));
-  ZMQSocket ZMQReq( client, zmq_buffer, REQ );
-  int16_t len;
+  Serial.println(F("Registering stream with server."));
+  uint8_t err;
   do{
-    uint8_t err = 0;
-    len = -1;
-    if( ZMQReq.connect( data_server, reg_port ) ){
-      client.stop(); // TODO: deal with this better
-      Serial.println("Cant connect to server");
-      err = 1;
+    err = origin.registerStream();
+    if(err==ERR_SERVER_RESP){
+      Serial.println(F("Server error."));
     }
-    if(!err){
-      // register datastream with server
-      Serial.println(F("Registering data stream..."));
-      len = packet.registerFloatStream();
-      ZMQReq.sendZMQMsg(len);
-      len = ZMQReq.recv();
-      if( len < 0 ){
-        Serial.println(F("negative len returned"));
-        client.stop();
-      }
+    if(err==ERR_SERVER_LEN){
+      Serial.println(F("Invalid Response length from server."));
     }
-  } while( len < 0 );
-  // check that we got the expected response from the moitoring server
-  if( len != 7 ){
-    Serial.println(F("Invalid Response from server, length: "));
-    Serial.println(len);
-    frontpanel_set_led( ERR4_LED, 1 );
-    for(;;)
-      ;
-  }
-  // disconnect from registering port
+  } while( err );
   Serial.println(F("Disconnecting REQ socket..."));
-  client.stop();
 }
 
 void setup_data_stream(){
-  // setup push socket
-  Serial.println(F("Setting up PUSH socket..."));
-  if( ZMQPush.connect( data_server, mes_port ) ){
-    Serial.println(F("oops"));
-    client.stop(); // TODO: deal with this better
-    frontpanel_set_led( ERR4_LED, 1 );
-    for(;;)
-      ;
-  }
+  Serial.println(F("Setting up data stream..."));
+  origin.setupDataStream();
   Serial.println(F("Starting"));
   Serial.println(F("Data"));
   Serial.println(F("Stream"));
@@ -253,10 +217,11 @@ void setup_data_stream(){
 
 void setup() {
   // minimal SPI bus config (cant have two devices being addressed at once)
-  //PORTG |= (1<<0);  // set AMC7812 CS pin high if connected
   digitalWrite(AMC7812_CS_ARDUINO_PIN, HIGH); // set AMC CS pin high 
   digitalWrite(SS, HIGH); // set ENCJ CS pin high 
-  pinMode(trigpin, INPUT);
+  pinMode(AMC7812_CS_ARDUINO_PIN, OUTPUT);
+  pinMode(SS, OUTPUT);
+  //pinMode(trigpin, INPUT);
 
   frontpanel_setup();
 
@@ -282,23 +247,23 @@ void loop() {
   Ethernet.maintain();
 
   now();  // see if its time to sync
-//  if( !client.connected() ){
-//    Serial.println(F("Client disconnected, attempting reconnect..."));
-//    client.stop();
-//    setup_data_stream();
-//  }
   frontpanel_set_led( COMM_LED, 0 );
 
   // if we havent extended the time period yet,
   // and if there is a non-zero drift correction
   // then make the period longer
   if( (!longerSyncPeriod) & getDriftCorrection() ){
-    Serial.println("syncing to network time.");
+    Serial.println(F("syncing to network time."));
     setSyncInterval(72000);  // every 2 hours
     longerSyncPeriod=1;
   }
 
-  uint8_t newTrig = digitalRead(trigpin); // TODO: replace with frontpanel function
+  uint8_t newTrig = 1;
+  if( millis() > nextTrig ){
+    newTrig = 0;
+    nextTrig = millis() + postingInterval;
+  }
+  //uint8_t newTrig = digitalRead(trigpin); // TODO: replace with frontpanel function
   //if( lastTrig && !newTrig ){  // trig on low to high trigger
   if( !lastTrig && newTrig ){  // trig on high to low trigger
     Serial.println("trigger detected");
@@ -318,10 +283,10 @@ void loop() {
   if( len ){
     Serial.println("incoming packet");
     frontpanel_set_led( COMM_LED, 1 );
-    len = ZMQPush.read(); // process header and get get actual mesg length
+    client.read((uint8_t*)buffer, len);
+    Serial.write(buffer, len);
     frontpanel_set_led( COMM_LED, 0 );
   }
-  //Serial.println("loop");
 }
 
 // normal arduino main function
@@ -339,9 +304,6 @@ int main(void){
 
 /*-------- NTP code ----------*/
   
-const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
-byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
-
 time_t getNtpTime()
 {
   while (Udp.parsePacket() > 0) ; // discard any previously received packets

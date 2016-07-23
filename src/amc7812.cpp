@@ -139,6 +139,7 @@ uint8_t AMC7812Class::begin(){
   if( (response != 0x1220) && (response != 0x1221) ){
   //if( (response != 0x1221) ){
     return AMC7812_DEV_ID_ERR;
+    //return response + 2;
   }
 
   // set dac gain to low range by default
