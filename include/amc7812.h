@@ -167,6 +167,15 @@
 
 #define AMC7812_TIMEOUT_CONV_CYCLS 16000 // 1 ms at 16 MHz clock, ignoring overhead
 
+#define IOFFSET_0_ADDR 0x4
+// MFE 04/2018
+// second ic's address was supposed to be 0x5 
+// either it was stuffed wrong or I messed up the specs
+#define IOFFSET_1_ADDR 0x6
+#define IOFFSET_OFF 0xFF
+#define IOFFSET_ON 0x00
+
+
 // functions
 #include <avr/io.h>
 #include <stdint.h>
@@ -343,7 +352,7 @@ class AMC7812Class {
      * Disabled channels default to 0.
      * The index matches the channel number i.e. ADCn value is stored at `ADC[n]`.
      */
-    const uint16_t* GetADCReadings() const { return adc_vals; };
+    uint16_t* GetADCReadings() { return adc_vals; };
 
     //! Read ADC gain setting
     /*!

@@ -19,6 +19,7 @@ REQ and PUSH ZeroMQ sockets are emulated
 #include <UIPEthernet.h>
 #include <UIPClient.h>
 #include <TimeLib.h>
+#include <Wire.h> // I2C
 
 #include "amc7812.h"
 #include "amc7812conf.h"
@@ -27,9 +28,9 @@ REQ and PUSH ZeroMQ sockets are emulated
 #include "origin.h"   // data server interface
 #include "datapacket.h"
 
-#include "frontpanel.h" // frontpanel led drivers
+//#include "frontpanel.h" // frontpanel led drivers
 
-#define DHCP 0
+#define DHCP 1
 //#define DEBUG
 
 // DATA COLLECTION CONFIG //////////////////////////////////////////////////////
@@ -59,8 +60,8 @@ Origin origin( client
     , data_server
     , reg_port
     , mes_port
-    , (char *)"RBMAG"   // stream name
-    , 5         // stream name length (max 10)
+    , (char *)"FNODE_ADCS"   // stream name
+    , 10        // stream name length (max 10)
     , 1         // use fractional seconds
     , channels  // maximum channels
     , channels  // channels used
@@ -112,42 +113,44 @@ uint8_t addReadings(){
     readings[i] = readings[i] >> 0;
   }
   
-  frontpanel_set_led( COMM_LED, 1 );
-  frontpanel_set_led( ERR3_LED, 1 );  // leave on so I can tell if the error occured
   origin.sendPacket( ts_sec, ts_fsec, (int16_t*)readings );
-  frontpanel_set_led( ERR3_LED, 0 );  // leave on so I can tell if the error occured
   if (allZeros){
-    frontpanel_set_led( ERR4_LED, 1 );  // leave on so I can tell if the error occured
     return AMC7812_TIMEOUT_ERR;
   }
-  frontpanel_set_led( COMM_LED, 0 );
   return conv_success;
 }
 
-uint8_t setup_DAQ(){
-  uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
-  uint8_t spsr = SPSR;                            // save spi settings, before setting up for ADC
-  SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
-  SPSR = AMC7812.GetSPSR();                       // set SPI settings for ADC operations
+uint8_t setup_offsets(){
+  Wire.beginTransmission(OFFSET_TPIC2810_ADDR0);
+  Wire.write(OFFSET_TPIC2810_UPDATE);
+  Wire.write(0x0);  // deafult is either all on or all off
+  uint8_t ret = Wire.endTransmission();
+  Wire.beginTransmission(OFFSET_TPIC2810_ADDR1);
+  Wire.write(OFFSET_TPIC2810_UPDATE);
+  Wire.write(0x0);  // deafult is either all on or all off
+  ret |= Wire.endTransmission();
+  return ret;  // 0 if ok
+}
 
-  digitalWrite(AMC7812_IDLE_LED_ARDUINO, LOW);
-  digitalWrite(AMC7812_COMM_LED_ARDUINO, LOW);
+
+uint8_t setup_DAQ(){
+  uint8_t spcr = SPCR;       // save spi settings, before setting up for ADC
+  uint8_t spsr = SPSR;       // save spi settings, before setting up for ADC
+  SPCR = AMC7812.GetSPCR();  // set SPI settings for ADC operations
+  SPSR = AMC7812.GetSPSR();  // set SPI settings for ADC operations
 
   Serial.print(F("\ninitializing AMC7812..."));
   uint8_t ret = AMC7812.begin();
   while ( ret ){
     Serial.print(F("Init of AMC7812 failed code: 0x"));
     Serial.println(ret, HEX);
-    frontpanel_set_led( ERR4_LED, 1 );
     for( uint8_t i=0; i<10; i++){
-      frontpanel_set_led( AMC_STAT_LED, (i+1)%2 );
       delay(100);
     }
     ret = AMC7812.begin();
   }
-  frontpanel_set_led( ERR4_LED, 0 );
   // enter triggered mode
-  AMC7812.SetTriggeredMode();
+  AMC7812.SetTriggeredADCMode();
   //AMC7812.DisableADCs();
   //for( uint8_t i=8; i<=13; i++){
   //  AMC7812.EnableADC(i);
@@ -157,7 +160,6 @@ uint8_t setup_DAQ(){
   SPSR = spsr;  // leave no trace
 
   Serial.println(F("AMC7812 device initialized"));
-  frontpanel_set_led( AMC_STAT_LED, 1 );
   return ret;
 }
 
@@ -223,31 +225,23 @@ void setup() {
   pinMode(SS, OUTPUT);
   //pinMode(trigpin, INPUT);
 
-  frontpanel_setup();
-
   Serial.begin(115200); //Turn on Serial Port for debugging
 
-  uint8_t ret = setup_DAQ();
-  frontpanel_set_led( COMM_LED, 1 );
+  setup_DAQ();
+  setup_offsets();
   setup_ethernet();
   setup_ntp();
   register_stream();
-  frontpanel_set_led( COMM_LED, 0 );
 
   delay(1000); // increase stability
-  frontpanel_set_led( COMM_LED, 1 );
   setup_data_stream();
-  frontpanel_set_led( COMM_LED, 0 );
   delay(1000);
 }
 
 void loop() {
-  frontpanel_set_led( IDLE_LED, 1 );
-  frontpanel_set_led( COMM_LED, 1 );
   Ethernet.maintain();
 
   now();  // see if its time to sync
-  frontpanel_set_led( COMM_LED, 0 );
 
   // if we havent extended the time period yet,
   // and if there is a non-zero drift correction
@@ -267,13 +261,9 @@ void loop() {
   //if( lastTrig && !newTrig ){  // trig on low to high trigger
   if( !lastTrig && newTrig ){  // trig on high to low trigger
     Serial.println("trigger detected");
-    frontpanel_set_led( IDLE_LED, 1 );
     //Send string back to client 
     if(addReadings() == AMC7812_TIMEOUT_ERR){
-      frontpanel_set_led( ERR1_LED, 1 );
-      frontpanel_set_led( ERR2_LED, 1 );  // keep on so I know it entered this state
       setup_DAQ();
-      frontpanel_set_led( ERR1_LED, 0 );
     }
   }
   lastTrig = newTrig;
@@ -282,10 +272,8 @@ void loop() {
   uint8_t len = client.available();
   if( len ){
     Serial.println("incoming packet");
-    frontpanel_set_led( COMM_LED, 1 );
     client.read((uint8_t*)buffer, len);
     Serial.write(buffer, len);
-    frontpanel_set_led( COMM_LED, 0 );
   }
 }
 
