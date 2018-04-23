@@ -24,6 +24,7 @@ REQ and PUSH ZeroMQ sockets are emulated
 #include "amc7812.h"
 #include "amc7812conf.h"
 #include "amc7812err.h"
+#include "tpic2810.h"  // input offset driver
 
 #include "origin.h"   // data server interface
 #include "datapacket.h"
@@ -52,8 +53,8 @@ char buffer[256]={0};
 // fill in an available IP address on your network here,
 // for manual configuration:
 IPAddress data_server(128,104,160,152);
-int reg_port = 5556;
-int mes_port = 5557;
+int reg_port = 5558;
+int mes_port = 5559;
 
 // origin data server interface
 Origin origin( client
@@ -121,14 +122,9 @@ uint8_t addReadings(){
 }
 
 uint8_t setup_offsets(){
-  Wire.beginTransmission(OFFSET_TPIC2810_ADDR0);
-  Wire.write(OFFSET_TPIC2810_UPDATE);
-  Wire.write(0x0);  // deafult is either all on or all off
-  uint8_t ret = Wire.endTransmission();
-  Wire.beginTransmission(OFFSET_TPIC2810_ADDR1);
-  Wire.write(OFFSET_TPIC2810_UPDATE);
-  Wire.write(0x0);  // deafult is either all on or all off
-  ret |= Wire.endTransmission();
+  setup_tpic2810();
+  uint8_t ret = set_tpic2810_all(IOFFSET_0_ADDR, IOFFSET_OFF);
+  ret |= set_tpic2810_all(IOFFSET_1_ADDR, IOFFSET_OFF);
   return ret;  // 0 if ok
 }
 
