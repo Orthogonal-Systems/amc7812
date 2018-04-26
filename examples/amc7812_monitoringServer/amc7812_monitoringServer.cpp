@@ -130,8 +130,8 @@ uint8_t setup_offsets(){
 
 
 uint8_t setup_DAQ(){
-  uint8_t spcr = SPCR;       // save spi settings, before setting up for ADC
-  uint8_t spsr = SPSR;       // save spi settings, before setting up for ADC
+  uint8_t spcr = SPCR;       // save SPI settings, before setting up for ADC
+  uint8_t spsr = SPSR;       // save SPI settings, before setting up for ADC
   SPCR = AMC7812.GetSPCR();  // set SPI settings for ADC operations
   SPSR = AMC7812.GetSPSR();  // set SPI settings for ADC operations
 
@@ -147,10 +147,6 @@ uint8_t setup_DAQ(){
   }
   // enter triggered mode
   AMC7812.SetTriggeredADCMode();
-  //AMC7812.DisableADCs();
-  //for( uint8_t i=8; i<=13; i++){
-  //  AMC7812.EnableADC(i);
-  //}
   
   SPCR = spcr;  // leave no trace
   SPSR = spsr;  // leave no trace
@@ -256,7 +252,7 @@ void loop() {
   //uint8_t newTrig = digitalRead(trigpin); // TODO: replace with frontpanel function
   //if( lastTrig && !newTrig ){  // trig on low to high trigger
   if( !lastTrig && newTrig ){  // trig on high to low trigger
-    Serial.println("trigger detected");
+    //Serial.println("trigger detected");
     //Send string back to client 
     if(addReadings() == AMC7812_TIMEOUT_ERR){
       setup_DAQ();
