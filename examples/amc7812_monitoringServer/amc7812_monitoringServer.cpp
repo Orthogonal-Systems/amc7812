@@ -125,13 +125,10 @@ uint8_t addReadings(){
 }
 
 uint8_t setup_DAQ(){
-  uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
-  uint8_t spsr = SPSR;                            // save spi settings, before setting up for ADC
-  SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
-  SPSR = AMC7812.GetSPSR();                       // set SPI settings for ADC operations
-
-  digitalWrite(AMC7812_IDLE_LED_ARDUINO, LOW);
-  digitalWrite(AMC7812_COMM_LED_ARDUINO, LOW);
+  uint8_t spcr = SPCR;       // save SPI settings, before setting up for ADC
+  uint8_t spsr = SPSR;       // save SPI settings, before setting up for ADC
+  SPCR = AMC7812.GetSPCR();  // set SPI settings for ADC operations
+  SPSR = AMC7812.GetSPSR();  // set SPI settings for ADC operations
 
   Serial.print(F("\ninitializing AMC7812..."));
   uint8_t ret = AMC7812.begin();
@@ -147,11 +144,7 @@ uint8_t setup_DAQ(){
   }
   frontpanel_set_led( ERR4_LED, 0 );
   // enter triggered mode
-  AMC7812.SetTriggeredMode();
-  //AMC7812.DisableADCs();
-  //for( uint8_t i=8; i<=13; i++){
-  //  AMC7812.EnableADC(i);
-  //}
+  AMC7812.SetTriggeredADCMode();
   
   SPCR = spcr;  // leave no trace
   SPSR = spsr;  // leave no trace
@@ -266,8 +259,7 @@ void loop() {
   //uint8_t newTrig = digitalRead(trigpin); // TODO: replace with frontpanel function
   //if( lastTrig && !newTrig ){  // trig on low to high trigger
   if( !lastTrig && newTrig ){  // trig on high to low trigger
-    Serial.println("trigger detected");
-    frontpanel_set_led( IDLE_LED, 1 );
+    //Serial.println("trigger detected");
     //Send string back to client 
     if(addReadings() == AMC7812_TIMEOUT_ERR){
       frontpanel_set_led( ERR1_LED, 1 );
