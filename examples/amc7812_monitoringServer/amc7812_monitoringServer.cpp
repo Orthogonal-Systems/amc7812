@@ -19,17 +19,19 @@ REQ and PUSH ZeroMQ sockets are emulated
 #include <UIPEthernet.h>
 #include <UIPClient.h>
 #include <TimeLib.h>
+#include <Wire.h> // I2C
 
 #include "amc7812.h"
 #include "amc7812conf.h"
 #include "amc7812err.h"
+#include "tpic2810.h"  // input offset driver
 
 #include "origin.h"   // data server interface
 #include "datapacket.h"
 
-#include "frontpanel.h" // frontpanel led drivers
+//#include "frontpanel.h" // frontpanel led drivers
 
-#define DHCP 0
+#define DHCP 1
 //#define DEBUG
 
 // DATA COLLECTION CONFIG //////////////////////////////////////////////////////
@@ -51,16 +53,16 @@ char buffer[256]={0};
 // fill in an available IP address on your network here,
 // for manual configuration:
 IPAddress data_server(128,104,160,152);
-int reg_port = 5556;
-int mes_port = 5557;
+int reg_port = 5558;
+int mes_port = 5559;
 
 // origin data server interface
 Origin origin( client
     , data_server
     , reg_port
     , mes_port
-    , (char *)"RBMAG"   // stream name
-    , 5         // stream name length (max 10)
+    , (char *)"FNODE_ADCS"   // stream name
+    , 10        // stream name length (max 10)
     , 1         // use fractional seconds
     , channels  // maximum channels
     , channels  // channels used
@@ -112,17 +114,20 @@ uint8_t addReadings(){
     readings[i] = readings[i] >> 0;
   }
   
-  frontpanel_set_led( COMM_LED, 1 );
-  frontpanel_set_led( ERR3_LED, 1 );  // leave on so I can tell if the error occured
   origin.sendPacket( ts_sec, ts_fsec, (int16_t*)readings );
-  frontpanel_set_led( ERR3_LED, 0 );  // leave on so I can tell if the error occured
   if (allZeros){
-    frontpanel_set_led( ERR4_LED, 1 );  // leave on so I can tell if the error occured
     return AMC7812_TIMEOUT_ERR;
   }
-  frontpanel_set_led( COMM_LED, 0 );
   return conv_success;
 }
+
+uint8_t setup_offsets(){
+  setup_tpic2810();
+  uint8_t ret = set_tpic2810_all(IOFFSET_0_ADDR, IOFFSET_OFF);
+  ret |= set_tpic2810_all(IOFFSET_1_ADDR, IOFFSET_OFF);
+  return ret;  // 0 if ok
+}
+
 
 uint8_t setup_DAQ(){
   uint8_t spcr = SPCR;       // save SPI settings, before setting up for ADC
@@ -135,14 +140,11 @@ uint8_t setup_DAQ(){
   while ( ret ){
     Serial.print(F("Init of AMC7812 failed code: 0x"));
     Serial.println(ret, HEX);
-    frontpanel_set_led( ERR4_LED, 1 );
     for( uint8_t i=0; i<10; i++){
-      frontpanel_set_led( AMC_STAT_LED, (i+1)%2 );
       delay(100);
     }
     ret = AMC7812.begin();
   }
-  frontpanel_set_led( ERR4_LED, 0 );
   // enter triggered mode
   AMC7812.SetTriggeredADCMode();
   
@@ -150,7 +152,6 @@ uint8_t setup_DAQ(){
   SPSR = spsr;  // leave no trace
 
   Serial.println(F("AMC7812 device initialized"));
-  frontpanel_set_led( AMC_STAT_LED, 1 );
   return ret;
 }
 
@@ -216,31 +217,23 @@ void setup() {
   pinMode(SS, OUTPUT);
   //pinMode(trigpin, INPUT);
 
-  frontpanel_setup();
-
   Serial.begin(115200); //Turn on Serial Port for debugging
 
-  uint8_t ret = setup_DAQ();
-  frontpanel_set_led( COMM_LED, 1 );
+  setup_DAQ();
+  setup_offsets();
   setup_ethernet();
   setup_ntp();
   register_stream();
-  frontpanel_set_led( COMM_LED, 0 );
 
   delay(1000); // increase stability
-  frontpanel_set_led( COMM_LED, 1 );
   setup_data_stream();
-  frontpanel_set_led( COMM_LED, 0 );
   delay(1000);
 }
 
 void loop() {
-  frontpanel_set_led( IDLE_LED, 1 );
-  frontpanel_set_led( COMM_LED, 1 );
   Ethernet.maintain();
 
   now();  // see if its time to sync
-  frontpanel_set_led( COMM_LED, 0 );
 
   // if we havent extended the time period yet,
   // and if there is a non-zero drift correction
@@ -262,10 +255,7 @@ void loop() {
     //Serial.println("trigger detected");
     //Send string back to client 
     if(addReadings() == AMC7812_TIMEOUT_ERR){
-      frontpanel_set_led( ERR1_LED, 1 );
-      frontpanel_set_led( ERR2_LED, 1 );  // keep on so I know it entered this state
       setup_DAQ();
-      frontpanel_set_led( ERR1_LED, 0 );
     }
   }
   lastTrig = newTrig;
@@ -274,10 +264,8 @@ void loop() {
   uint8_t len = client.available();
   if( len ){
     Serial.println("incoming packet");
-    frontpanel_set_led( COMM_LED, 1 );
     client.read((uint8_t*)buffer, len);
     Serial.write(buffer, len);
-    frontpanel_set_led( COMM_LED, 0 );
   }
 }
 

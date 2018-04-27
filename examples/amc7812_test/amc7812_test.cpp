@@ -8,6 +8,7 @@
  
 #include "amc7812.h"
 #include "amc7812conf.h"
+#include "tpic2810.h"
 
 #define READ_ADC_REG 0
 #define READ_BLOCK_SIZE 512
@@ -41,6 +42,10 @@ AMC7812Class AMC7812;
 void setup ()
 {
   Serial.begin(9600);
+  setup_tpic2810();
+  // set default values for input offsets
+  set_tpic2810_all(IOFFSET_0_ADDR, IOFFSET_OFF);
+  set_tpic2810_all(IOFFSET_1_ADDR, IOFFSET_OFF);
 
   // initialize device
   uint8_t ret = AMC7812.begin();
@@ -113,6 +118,16 @@ void loop(){
 
   uint16_t adc_vals[AMC7812_ADC_CNT];
   for(uint8_t j=0; j < 2; j++){
+    uint8_t ioffset = IOFFSET_OFF;
+    Serial.printf("Setting input offset to ");
+    if(j){
+      Serial.printf("ON.\n");
+      ioffset = IOFFSET_ON;
+    } else {
+      Serial.printf("OFF.\n");
+    }
+    set_tpic2810_all(IOFFSET_0_ADDR, ioffset);
+    set_tpic2810_all(IOFFSET_1_ADDR, ioffset);
     AMC7812.ReadADC( 0 );
     // just do a dummy read of the next register to round it out
     for( uint8_t i = 1; i <= AMC7812_ADC_CNT; i++ ){
