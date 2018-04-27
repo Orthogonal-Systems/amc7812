@@ -32,6 +32,7 @@ REQ and PUSH ZeroMQ sockets are emulated
 //#include "frontpanel.h" // frontpanel led drivers
 
 #define DHCP 1
+#define EXT_TRIG 1
 //#define DEBUG
 
 // DATA COLLECTION CONFIG //////////////////////////////////////////////////////
@@ -39,7 +40,7 @@ AMC7812Class AMC7812;
 uint8_t channels = AMC7812_ADC_CNT;
 uint8_t lastTrig = 1;
 uint32_t nextTrig = 0;
-//uint8_t trigpin = AMC7812_DIO0_ARDUINO;
+uint8_t trigpin = 12;  // AMC7812_DIO0_ARDUINO;
 const unsigned long postingInterval = 100;  //delay between updates (in milliseconds)
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -244,14 +245,18 @@ void loop() {
     longerSyncPeriod=1;
   }
 
-  uint8_t newTrig = 1;
+  uint8_t newTrig = 0;
+#if EXT_TRIG
+  // TODO: replace with frontpanel function
+  newTrig = digitalRead(trigpin); 
+#else
   if( millis() > nextTrig ){
-    newTrig = 0;
+    newTrig = 1;
     nextTrig = millis() + postingInterval;
   }
-  //uint8_t newTrig = digitalRead(trigpin); // TODO: replace with frontpanel function
+#endif
   //if( lastTrig && !newTrig ){  // trig on low to high trigger
-  if( !lastTrig && newTrig ){  // trig on high to low trigger
+  if( !lastTrig && newTrig ){  // trig on low to high trigger
     //Serial.println("trigger detected");
     //Send string back to client 
     if(addReadings() == AMC7812_TIMEOUT_ERR){

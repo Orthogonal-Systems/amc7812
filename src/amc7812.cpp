@@ -100,7 +100,7 @@ uint8_t AMC7812Class::begin(){
 //#endif
   // set up SCLK, MOSI, MISO, and SS as outputs, and enambles SPI as master
   // set MOSI & SCK & CS as output
-  AMC7812_SPI_DDR = _BV(AMC7812_SPI_SCLK) | _BV(AMC7812_SPI_MOSI) | _BV(AMC7812_HWCS_PIN);
+  AMC7812_SPI_DDR |= _BV(AMC7812_SPI_SCLK) | _BV(AMC7812_SPI_MOSI) | _BV(AMC7812_HWCS_PIN);
   // setup spi status register, SPI mode 1
   // prescalar 2, f/2
   SPCR = amc_spcr;
