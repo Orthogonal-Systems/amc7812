@@ -20,6 +20,8 @@ REQ and PUSH ZeroMQ sockets are emulated
 #include <UIPClient.h>
 #include <TimeLib.h>
 #include <Wire.h> // I2C
+#include <avr/wdt.h>
+#include <util/delay.h>
 
 #include "amc7812.h"
 #include "amc7812conf.h"
@@ -35,22 +37,23 @@ REQ and PUSH ZeroMQ sockets are emulated
 #define EXT_TRIG 1
 //#define DEBUG
 
-// DATA COLLECTION CONFIG //////////////////////////////////////////////////////
+// DATA COLLECTION CONFIG /////////////////////////////////////////////////////
 AMC7812Class AMC7812;
 uint8_t channels = AMC7812_ADC_CNT;
 uint8_t lastTrig = 1;
 uint32_t nextTrig = 0;
 uint8_t trigpin = 12;  // AMC7812_DIO0_ARDUINO;
 const unsigned long postingInterval = 100;  //delay between updates (in milliseconds)
-////////////////////////////////////////////////////////////////////////////////
+const unsigned long secondTrigInterval = 10;  //delay between second trig pass (in milliseconds)
+///////////////////////////////////////////////////////////////////////////////
 
-// GENERIC ETHERNET INTERFACE CONFIG ///////////////////////////////////////////
+// GENERIC ETHERNET INTERFACE CONFIG //////////////////////////////////////////
 EthernetClient client;
 IPAddress ip    (192,168,0,101);
 char buffer[256]={0};
-////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
-// ORIGIN DATA SERVER INTERFACE CONFIG /////////////////////////////////////////
+// ORIGIN DATA SERVER INTERFACE CONFIG ////////////////////////////////////////
 // fill in an available IP address on your network here,
 // for manual configuration:
 IPAddress data_server(128,104,160,152);
@@ -71,9 +74,9 @@ Origin origin( client
     , INT16_TYPE_SIZE
     , buffer
 );
-////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
-// NTP SERVER CONFIG ///////////////////////////////////////////////////////////
+// NTP SERVER CONFIG //////////////////////////////////////////////////////////
 EthernetUDP Udp;
 // address for ntp server sync
 IPAddress ntp_server(128,104,160,150);
@@ -83,39 +86,30 @@ time_t getNtpTime();
 uint8_t longerSyncPeriod = 0; // state tracker
 const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
 byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
-////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
-uint8_t addReadings(){
-  uint16_t readings[AMC7812_ADC_CNT] = {0};
+uint8_t addReadings(int16_t (&reads)[AMC7812_ADC_CNT]){
   uint8_t conv_success;
-  uint8_t spcr = SPCR;                            // save spi settings, before setting up for ADC
-  uint8_t spsr = SPSR;                            // save spi settings, before setting up for ADC
-  SPCR = AMC7812.GetSPCR();                       // set SPI settings for ADC operations
-  SPSR = AMC7812.GetSPSR();                       // set SPI settings for ADC operations
-  time_t ts = now(0);                             // timestamp at start (dont allow ntp sync), ms
-  for( uint8_t i=0; i<1; i++){
-    conv_success = AMC7812.ReadADCs();            // perform conversion cycle on active ADCs
-    uint16_t* temp = AMC7812.GetADCReadings();    // retrieve results of the read
-    for( uint8_t j=0; j<channels; j++ ){
-      readings[j] += temp[j];
-    }
+  uint8_t spcr = SPCR;                         // save spi settings, before setting up for ADC
+  uint8_t spsr = SPSR;                         // save spi settings, before setting up for ADC
+  SPCR = AMC7812.GetSPCR();                    // set SPI settings for ADC operations
+  SPSR = AMC7812.GetSPSR();                    // set SPI settings for ADC operations
+  conv_success = AMC7812.ReadADCs();         // perform conversion cycle on active ADCs
+  uint16_t* temp = AMC7812.GetADCReadings(); // retrieve results of the read
+  for( uint8_t j=0; j<channels; j++ ){
+    reads[j] = temp[j];
   }
   SPCR = spcr;  // leave no trace
   SPSR = spsr;  // leave no trace
 
-  // separate 64b timestamp to 32b second and fractional second components
-  uint32_t ts_sec = toSecs(ts);
-  uint32_t ts_fsec = toFracSecs(ts);
   uint8_t allZeros = 1;
-
   for( uint8_t i=0; i<channels; i++ ){
-    if( readings[i] != 0 ){
+    if( reads[i] != 0 ){
       allZeros=0;
+      break;
     }
-    readings[i] = readings[i] >> 0;
   }
   
-  origin.sendPacket( ts_sec, ts_fsec, (int16_t*)readings );
   if (allZeros){
     return AMC7812_TIMEOUT_ERR;
   }
@@ -124,7 +118,9 @@ uint8_t addReadings(){
 
 uint8_t setup_offsets(){
   setup_tpic2810();
-  uint8_t ret = set_tpic2810_all(IOFFSET_0_ADDR, IOFFSET_OFF);
+  // offsets 0 -> 2.5 V offset added
+  // offsets 1 -> 0.0 V offset
+  uint8_t ret = set_tpic2810_all(IOFFSET_0_ADDR, 0xC7);
   ret |= set_tpic2810_all(IOFFSET_1_ADDR, IOFFSET_OFF);
   return ret;  // 0 if ok
 }
@@ -209,7 +205,6 @@ void setup_data_stream(){
   Serial.println(F("Stream"));
 }
 
-
 void setup() {
   // minimal SPI bus config (cant have two devices being addressed at once)
   digitalWrite(AMC7812_CS_ARDUINO_PIN, HIGH); // set AMC CS pin high 
@@ -229,9 +224,11 @@ void setup() {
   delay(1000); // increase stability
   setup_data_stream();
   delay(1000);
+  wdt_enable(WDTO_1S);
 }
 
 void loop() {
+  wdt_reset();
   Ethernet.maintain();
 
   now();  // see if its time to sync
@@ -252,16 +249,79 @@ void loop() {
 #else
   if( millis() > nextTrig ){
     newTrig = 1;
-    nextTrig = millis() + postingInterval;
+    nextTrig = millis() + secondTrigInterval;
   }
 #endif
-  //if( lastTrig && !newTrig ){  // trig on low to high trigger
+
   if( !lastTrig && newTrig ){  // trig on low to high trigger
+    time_t ts = now(0);  // timestamp at start (dont allow ntp sync), ms
     //Serial.println("trigger detected");
     //Send string back to client 
-    if(addReadings() == AMC7812_TIMEOUT_ERR){
+    int16_t readings[AMC7812_ADC_CNT]; // array for low to high trig
+    if(addReadings(readings) == AMC7812_TIMEOUT_ERR){
       setup_DAQ();
     }
+
+    int16_t readings2[AMC7812_ADC_CNT]; // array for high to low trig
+    // wait for second trigger transition
+    while(newTrig){
+#if EXT_TRIG
+      // TODO: replace with frontpanel function
+      newTrig = digitalRead(trigpin); 
+#else
+      if( millis() > nextTrig ){
+        newTrig = 0;
+        nextTrig = millis() + postingInterval;
+      }
+#endif
+    }
+    if(addReadings(readings2) == AMC7812_TIMEOUT_ERR){
+      setup_DAQ();
+    }
+
+    // take the first 8 channels from the first trigger readings
+    // and the second 8 channels from the second trigger readings
+//    for(uint8_t os=AMC7812_ADC_CNT/2; os<AMC7812_ADC_CNT; os++){
+//      readings[os] = readings2[os];
+//    }
+
+
+    int16_t readings3[AMC7812_ADC_CNT]; // array for second low to high trig
+    while(!newTrig){
+#if EXT_TRIG
+      // TODO: replace with frontpanel function
+      newTrig = digitalRead(trigpin); 
+#else
+      if( millis() > nextTrig ){
+        newTrig = 0;
+        nextTrig = millis() + postingInterval;
+      }
+#endif
+    }
+    if(addReadings(readings3) == AMC7812_TIMEOUT_ERR){
+      setup_DAQ();
+    }
+    // substract background signal from relevant channels
+    // the readings vectors are all messed up and I cant figure out why
+    // readings is supposed to hold the first trigger
+    // readings2 is supposed to hold the second trigger
+    // readings3 is supposed to hold the third, but they are all jumbled
+    // I had to determine what is ending up where experimentally
+    // So beware
+    readings2[1] = readings2[1] - readings[1];
+    readings2[2] = readings2[2] - readings[2];
+    //readings2[8] = readings2[8] - readings3[8];
+    readings2[8] = readings2[8] - readings[1];
+    // might as well put the backgrounds on some unused channels
+    readings2[9] = readings[1];
+    readings2[10] = readings[2];
+
+
+    // separate 64b timestamp to 32b second and fractional second components
+    uint32_t ts_sec = toSecs(ts);
+    uint32_t ts_fsec = toFracSecs(ts);
+    // I don't know why the readings vector doesn't seem to work correctly
+    origin.sendPacket( ts_sec, ts_fsec, (int16_t*)readings2 );
   }
   lastTrig = newTrig;
 
